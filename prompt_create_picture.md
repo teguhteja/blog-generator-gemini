@@ -1,0 +1,2 @@
+- TOPIC = '{}'
+- A vibrant, professional digital illustration for a blog post titled '[TOPIC]', featuring The scene is colorful, realistic, beginner-friendly, and designed to capture attention and explain the concept at a glance. Include bold, readable text: '[TOPIC]', with a bright and inviting background. Style is modern, clear, and perfect for high-traffic blog posts.

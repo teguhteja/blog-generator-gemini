@@ -1,0 +1,1 @@
+get the entire content of the uploaded file, clean it from non-technical elements like timestamps and tags. Use a clear and easy to understand structure. create steps for  tutorial based on the content of the sub. include the subs file name.create in english language
