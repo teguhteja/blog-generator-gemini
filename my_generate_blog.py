@@ -32,6 +32,9 @@ def parse_and_select_keyphrase(seo_content):
 
     Args:
         seo_content (str): Teks mentah yang berisi daftar keyphrase bernomor.
+    
+    Returns:
+        str: Keyphrase yang dipilih oleh pengguna, atau None jika tidak ada yang dipilih.
     """
     # Mencari baris yang diawali dengan angka, titik, dan spasi
     keyphrases = re.findall(r"^\s*\d+\.\s*(.*)", seo_content, re.MULTILINE)
@@ -42,7 +45,7 @@ def parse_and_select_keyphrase(seo_content):
         print("--------------------")
         print(seo_content)
         print("--------------------")
-        return
+        return None
 
     print("\n💡 Silakan pilih Keyphrase SEO utama Anda dari daftar berikut:")
     for i, phrase in enumerate(keyphrases):
@@ -54,11 +57,12 @@ def parse_and_select_keyphrase(seo_content):
             if 1 <= choice <= len(keyphrases):
                 selected_phrase = keyphrases[choice - 1].strip()
                 print(f"\n✅ Anda memilih: \"{selected_phrase}\"")
-                break
+                return selected_phrase
             else:
                 print(f"❌ Pilihan tidak valid. Harap masukkan angka antara 1 dan {len(keyphrases)}.")
-        except ValueError:
-            print("❌ Input tidak valid. Harap masukkan sebuah angka.")
+        except (ValueError, KeyboardInterrupt):
+            print("\n❌ Pemilihan dibatalkan.")
+            return None
 
 def run_generation_workflow(input_path, blog_prompt_path, model_name):
     """
@@ -72,7 +76,8 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
         sys.exit(1)
     genai.configure(api_key=api_key)
 
-    seo_prompt_path = 'prompt_add_seo.md'
+    # Definisikan semua path prompt yang dibutuhkan
+    seo_prompt_path = "prompt_add_seo.md"
     for path in [input_path, blog_prompt_path, seo_prompt_path]:
         if not os.path.exists(path):
             print(f"❌ Error: File '{path}' tidak ditemukan.")
@@ -87,6 +92,7 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
 
     output_md_path = os.path.join(dir_name, f"{dir_name}.md")
     output_seo_path = os.path.join(dir_name, f"{dir_name}.seo.md")
+    output_blog_path = os.path.join(dir_name, f"{dir_name}.blog.md")
 
     # Langkah 3: Buat direktori
     try:
@@ -136,8 +142,45 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
         with open(output_seo_path, 'w', encoding='utf-8') as f:
             f.write(seo_content)
         print(f"✅ Analisis SEO berhasil dibuat dan disimpan di: {output_seo_path}")
+        
         # Langkah 6: Parsing dan pilih keyphrase
-        parse_and_select_keyphrase(seo_content)
+        selected_keyphrase = parse_and_select_keyphrase(seo_content)
+
+        # Langkah 7: Buat blog post final berdasarkan keyphrase yang dipilih
+        if selected_keyphrase:
+            create_blog_prompt_path = 'prompt_create_blog.md'
+            if not os.path.exists(create_blog_prompt_path):
+                print(f"❌ Error: File prompt '{create_blog_prompt_path}' tidak ditemukan.")
+                sys.exit(1)
+
+            print(f"\n📄 Membaca file prompt final: {create_blog_prompt_path}")
+            try:
+                with open(create_blog_prompt_path, 'r', encoding='utf-8') as f:
+                    create_blog_prompt_content = f.read()
+            except Exception as e:
+                print(f"❌ Error saat membaca file '{create_blog_prompt_path}': {e}")
+                sys.exit(1)
+            
+            # Injeksi keyphrase ke dalam prompt
+            injected_create_blog_prompt = create_blog_prompt_content.format(selected_keyphrase)
+
+            # Gabungkan prompt, konteks dari .vtt, dan konteks dari .md
+            final_blog_post_prompt = (
+                f"{injected_create_blog_prompt}\n\n"
+                f"---\n\n"
+                f"CONTEXT FROM ORIGINAL TRANSCRIPT (`{base_name}`):\n\n{input_content}\n\n"
+                f"---\n\n"
+                f"CONTEXT FROM DRAFT POST (`{os.path.basename(output_md_path)}`):\n\n{blog_content}"
+            )
+
+            final_blog_post_content = call_gemini(final_blog_post_prompt, model_name)
+
+            if final_blog_post_content:
+                with open(output_blog_path, 'w', encoding='utf-8') as f:
+                    f.write(final_blog_post_content)
+                print(f"✅ Blog post final berhasil dibuat dan disimpan di: {output_blog_path}")
+            else:
+                print("❌ Gagal membuat blog post final.")
     else:
         print("❌ Gagal membuat analisis SEO.")
         sys.exit(1)
@@ -146,7 +189,7 @@ def main():
     """Fungsi utama untuk parsing argumen dan menjalankan skrip."""
     parser = argparse.ArgumentParser(
         description="Membuat artikel blog dan analisis SEO dari file input menggunakan Gemini.",
-        epilog="Contoh: python my_generate_blog.py -i nama_file.vtt -p prompt_tutorial_subs.md -m gemini-pro"
+        epilog="Contoh: python my_generate_blog.py -i nama_file.vtt -p prompt_tutorial_subs.md -m gemini-1.5-pro-latest"
     )
 
     parser.add_argument(
@@ -160,7 +203,7 @@ def main():
     )
     parser.add_argument(
         "-m", "--model",
-        default='gemini-2.5-flash',
+        default='gemini-1.5-flash-latest',
         help="Model Gemini yang akan digunakan. (Default: %(default)s)"
     )
     args = parser.parse_args()
