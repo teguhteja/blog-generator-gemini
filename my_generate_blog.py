@@ -76,15 +76,22 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
         sys.exit(1)
     genai.configure(api_key=api_key)
 
+    base_name = os.path.basename(input_path)
+    youtube_code_match = re.search(r'\[([a-zA-Z0-9_-]+)\]', base_name)
+    youtube_link = None
+    if youtube_code_match:
+        youtube_code = youtube_code_match.group(1)
+        youtube_link = f"https://www.youtube.com/watch?v={youtube_code}"
+        print(f"🔗 Tautan YouTube terdeteksi: {youtube_link}")
+
     # Definisikan semua path prompt yang dibutuhkan
-    seo_prompt_path = "prompt_add_seo.md"
-    for path in [input_path, blog_prompt_path, seo_prompt_path]:
+    keyphrase_prompt_path = "prompt_add_seo.md" # Prompt untuk mendapatkan keyphrase
+    for path in [input_path, blog_prompt_path, keyphrase_prompt_path]:
         if not os.path.exists(path):
             print(f"❌ Error: File '{path}' tidak ditemukan.")
             sys.exit(1)
 
     # Langkah 2: Siapkan nama direktori dan path file
-    base_name = os.path.basename(input_path)
     dir_name, _ = os.path.splitext(base_name)
     if not dir_name:
         print(f"❌ Error: Nama file tidak valid untuk membuat direktori dari '{input_path}'")
@@ -126,21 +133,26 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
         sys.exit(1)
 
     # Langkah 5: Buat analisis SEO
-    print(f"\n📄 Membaca file prompt SEO: {seo_prompt_path}")
+    print(f"\n📄 Membaca file prompt untuk keyphrase: {keyphrase_prompt_path}")
     try:
-        with open(seo_prompt_path, 'r', encoding='utf-8') as f:
-            seo_prompt_content = f.read()
+        with open(keyphrase_prompt_path, 'r', encoding='utf-8') as f:
+            keyphrase_prompt_content = f.read()
     except Exception as e:
         print(f"❌ Error saat membaca file SEO prompt: {e}")
         sys.exit(1)
 
-    # Menggunakan konten blog yang baru dibuat sebagai konteks untuk SEO
-    final_seo_prompt = f"{seo_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_md_path)}`:\n\n{blog_content}"
+    # Menggunakan konten blog yang baru dibuat sebagai konteks untuk mendapatkan keyphrase
+    final_seo_prompt = f"{keyphrase_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_md_path)}`:\n\n{blog_content}"
     seo_content = call_gemini(final_seo_prompt, model_name)
 
     if seo_content:
+        content_to_write = seo_content
+        # Tambahkan link YouTube ke file SEO jika ada
+        if youtube_link:
+            content_to_write = f"**Sumber Video:** {youtube_link}\n\n---\n\n{seo_content}"
+
         with open(output_seo_path, 'w', encoding='utf-8') as f:
-            f.write(seo_content)
+            f.write(content_to_write)
         print(f"✅ Analisis SEO berhasil dibuat dan disimpan di: {output_seo_path}")
         
         # Langkah 6: Parsing dan pilih keyphrase
@@ -176,11 +188,44 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
             final_blog_post_content = call_gemini(final_blog_post_prompt, model_name)
 
             if final_blog_post_content:
+                content_to_write = final_blog_post_content
+                # Tambahkan link YouTube setelah judul jika ada
+                if youtube_link:
+                    lines = content_to_write.split('\n', 1)
+                    title = lines[0]
+                    body = lines[1] if len(lines) > 1 else ''
+                    link_markdown = f"\n_Tonton video tutorial asli di YouTube_\n"
+                    content_to_write = f"{title}\n{link_markdown}\n{body}"
+
                 with open(output_blog_path, 'w', encoding='utf-8') as f:
-                    f.write(final_blog_post_content)
+                    f.write(content_to_write)
                 print(f"✅ Blog post final berhasil dibuat dan disimpan di: {output_blog_path}")
             else:
                 print("❌ Gagal membuat blog post final.")
+                sys.exit(1)
+
+            # Langkah 8: Buat metadata SEO detail dan tambahkan ke file .seo.md
+            seo_meta_prompt_path = 'prompt_create_seo.md'
+            if not os.path.exists(seo_meta_prompt_path):
+                print(f"❌ Error: File prompt '{seo_meta_prompt_path}' tidak ditemukan.")
+                sys.exit(1)
+            
+            print(f"\n📄 Membaca file prompt untuk metadata SEO: {seo_meta_prompt_path}")
+            with open(seo_meta_prompt_path, 'r', encoding='utf-8') as f:
+                seo_meta_prompt_content = f.read()
+
+            # Menggunakan konten blog final sebagai konteks
+            final_seo_meta_prompt = f"{seo_meta_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_blog_path)}`:\n\n{final_blog_post_content}"
+            seo_meta_content = call_gemini(final_seo_meta_prompt, model_name)
+
+            if seo_meta_content:
+                # Menambahkan hasil baru ke file .seo.md yang sudah ada
+                with open(output_seo_path, 'a', encoding='utf-8') as f:
+                    f.write("\n\n---\n\n## SEO Metadata Lanjutan\n\n")
+                    f.write(seo_meta_content)
+                print(f"✅ Metadata SEO lanjutan berhasil ditambahkan ke: {output_seo_path}")
+            else:
+                print("❌ Gagal membuat metadata SEO lanjutan.")
     else:
         print("❌ Gagal membuat analisis SEO.")
         sys.exit(1)
