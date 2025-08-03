@@ -12,8 +12,8 @@ __CONSTRAINTS__
 - Use Focus Keyword at the beginning of your content.
 - Use Focus Keyword in the content naturally.
 - Content should be more than 1000 words long.
-- Use Focus Keyword in subheading(s) like H2, H3, H4, etc., where contextually relevant.
-- Aim for a keyword density of approximately 1.0. Prioritize natural language and readability.
+- Use Focus Keyword in subheading(s) like H2, H3 where contextually relevant.
+- Aim for a keyword density of approximately 2.0. Prioritize natural language and readability.
 - Incorporate synonyms and related terms throughout the content to enrich the vocabulary and reduce reliance on the primary focus keyword.
 - Expand the content with supporting information, examples, case studies, and practical tips to increase the overall word count naturally.
 - Prioritize readability and a natural, conversational tone. Avoid keyword stuffing or any unnatural phrasing.

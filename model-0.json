@@ -1,0 +1,6 @@
+{
+    "model_tutorial": "gemini-1.5-flash-latest",
+    "model_seo": "gemini-1.5-flash-latest",
+    "model_blog": "gemini-1.5-pro-latest",
+    "model_image": "gemini-1.5-pro-latest"
+}
