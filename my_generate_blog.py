@@ -3,8 +3,16 @@ import argparse
 import os
 import sys
 import re
+import io
+import json
+import subprocess
+from google import genai as genai_image
 import google.generativeai as genai
+from PIL import Image
 from dotenv import load_dotenv
+from google.genai import types
+from io import BytesIO
+import base64
 
 def call_gemini(prompt_text, model_name):
     """
@@ -25,6 +33,63 @@ def call_gemini(prompt_text, model_name):
     except Exception as e:
         print(f"❌ Terjadi kesalahan saat menghubungi Gemini API: {e}")
         return None
+
+def generate_image(prompt_text, model_name, api_key):
+    """
+    Memanggil Gemini API untuk membuat gambar.
+
+    Args:
+        prompt_text (str): Prompt teks yang mendeskripsikan gambar.
+        model_name (str): Nama model yang akan digunakan (harus mampu membuat gambar).
+
+    Returns:
+        PIL.Image.Image: Objek gambar, atau None jika terjadi error.
+    """
+    try:
+        print(f"\n🎨 Menghubungi Gemini dengan model '{model_name}' untuk membuat gambar...")
+        client = genai_image.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt_text,
+            config=types.GenerateContentConfig(
+                 response_modalities=['TEXT', 'IMAGE']
+            )
+        )
+
+        # Iterasi melalui semua bagian respons untuk menemukan gambar
+        for part in response.candidates[0].content.parts:
+            if part.text is not None:
+                print(part.text)
+            elif part.inline_data is not None:
+                image = Image.open(BytesIO((part.inline_data.data)))
+                return image
+    except Exception as e:
+        print(f"❌ Terjadi kesalahan saat membuat gambar: {e}")
+        return None
+
+def sanitize_filename(text, extension):
+    """
+    Mengubah teks menjadi nama file yang valid.
+    """
+    sanitized = re.sub(r'[^\w\s-]', '', text.lower()).strip()
+    sanitized = re.sub(r'[-\s]+', '-', sanitized)
+    return f"{sanitized}.{extension}"
+
+def resize_image(image_path):
+    """
+    Mengubah ukuran gambar menggunakan ImageMagick.
+    """
+    try:
+        print(f"🖼️  Mengubah ukuran gambar: {image_path}")
+        command = ['convert', str(image_path), '-resize', '1024x720', '-quality', '100%', str(image_path)]
+        subprocess.run(command, check=True, capture_output=True, text=True)
+        print("✅ Gambar berhasil diubah ukurannya.")
+    except FileNotFoundError:
+        print("⚠️  Peringatan: Perintah 'convert' (ImageMagick) tidak ditemukan.")
+        print("   Gambar tidak diubah ukurannya. Silakan install ImageMagick untuk fungsionalitas penuh.")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Gagal mengubah ukuran gambar: {e.stderr}")
+
 
 def parse_and_select_keyphrase(seo_content):
     """
@@ -64,12 +129,26 @@ def parse_and_select_keyphrase(seo_content):
             print("\n❌ Pemilihan dibatalkan.")
             return None
 
-def run_generation_workflow(input_path, blog_prompt_path, model_name):
+def run_generation_workflow(input_path, blog_prompt_path):
     """
     Menjalankan alur kerja lengkap: membuat direktori, konten blog, dan analisis SEO.
     """
     # Langkah 1: Konfigurasi awal dan validasi path
     load_dotenv()
+
+    # Muat konfigurasi model dari file JSON
+    model_config_path = 'model.json'
+    if not os.path.exists(model_config_path):
+        print(f"❌ Error: File konfigurasi model '{model_config_path}' tidak ditemukan.")
+        sys.exit(1)
+    try:
+        with open(model_config_path, 'r') as f:
+            model_config = json.load(f)
+        print(f"✅ Konfigurasi model berhasil dimuat dari {model_config_path}")
+    except json.JSONDecodeError:
+        print(f"❌ Error: Gagal mem-parsing file JSON '{model_config_path}'. Pastikan formatnya benar.")
+        sys.exit(1)
+
     api_key = os.getenv("GANAI_API_KEY")
     if not api_key:
         print("❌ Error: Variabel GANAI_API_KEY tidak ditemukan di file .env Anda.")
@@ -122,7 +201,7 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
         sys.exit(1)
 
     final_blog_prompt = f"{blog_prompt_content}\n\n---\n\nKonteks dari file `{base_name}`:\n\n{input_content}"
-    blog_content = call_gemini(final_blog_prompt, model_name)
+    blog_content = call_gemini(final_blog_prompt, model_config.get('model_tutorial', 'gemini-1.5-flash-latest'))
 
     if blog_content:
         with open(output_md_path, 'w', encoding='utf-8') as f:
@@ -143,7 +222,7 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
 
     # Menggunakan konten blog yang baru dibuat sebagai konteks untuk mendapatkan keyphrase
     final_seo_prompt = f"{keyphrase_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_md_path)}`:\n\n{blog_content}"
-    seo_content = call_gemini(final_seo_prompt, model_name)
+    seo_content = call_gemini(final_seo_prompt, model_config.get('model_seo', 'gemini-1.5-flash-latest'))
 
     if seo_content:
         content_to_write = seo_content
@@ -185,7 +264,7 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
                 f"CONTEXT FROM DRAFT POST (`{os.path.basename(output_md_path)}`):\n\n{blog_content}"
             )
 
-            final_blog_post_content = call_gemini(final_blog_post_prompt, model_name)
+            final_blog_post_content = call_gemini(final_blog_post_prompt, model_config.get('model_blog', 'gemini-1.5-pro-latest'))
 
             if final_blog_post_content:
                 content_to_write = final_blog_post_content
@@ -216,7 +295,7 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
 
             # Menggunakan konten blog final sebagai konteks
             final_seo_meta_prompt = f"{seo_meta_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_blog_path)}`:\n\n{final_blog_post_content}"
-            seo_meta_content = call_gemini(final_seo_meta_prompt, model_name)
+            seo_meta_content = call_gemini(final_seo_meta_prompt, model_config.get('model_seo', 'gemini-1.5-pro-latest'))
 
             if seo_meta_content:
                 # Menambahkan hasil baru ke file .seo.md yang sudah ada
@@ -226,6 +305,30 @@ def run_generation_workflow(input_path, blog_prompt_path, model_name):
                 print(f"✅ Metadata SEO lanjutan berhasil ditambahkan ke: {output_seo_path}")
             else:
                 print("❌ Gagal membuat metadata SEO lanjutan.")
+
+            # Langkah 9: Buat gambar untuk blog post
+            image_prompt_path = 'prompt_create_picture.md'
+            if not os.path.exists(image_prompt_path):
+                print(f"⚠️ Peringatan: File prompt '{image_prompt_path}' tidak ditemukan. Melewatkan pembuatan gambar.")
+            else:
+                print(f"\n📄 Membaca file prompt untuk gambar: {image_prompt_path}")
+                with open(image_prompt_path, 'r', encoding='utf-8') as f:
+                    image_prompt_content = f.read()
+
+                final_image_prompt = image_prompt_content.format(selected_keyphrase)
+
+                # Gunakan model yang kuat untuk pembuatan gambar
+                image_model = model_config.get('model_image', 'gemini-2.0-flash-preview-image-generation')
+                print(f"ℹ️  Menggunakan model '{image_model}' untuk pembuatan gambar (ini mungkin memerlukan waktu lebih lama).")
+                generated_image = generate_image(final_image_prompt, model_name=image_model, api_key=api_key)
+
+                if generated_image:
+                    image_filename = sanitize_filename(selected_keyphrase, 'png')
+                    image_path = os.path.join(dir_name, image_filename)
+                    generated_image.save(image_path)
+                    print(f"✅ Gambar berhasil dibuat dan disimpan di: {image_path}")
+                    resize_image(image_path)
+
     else:
         print("❌ Gagal membuat analisis SEO.")
         sys.exit(1)
@@ -234,7 +337,7 @@ def main():
     """Fungsi utama untuk parsing argumen dan menjalankan skrip."""
     parser = argparse.ArgumentParser(
         description="Membuat artikel blog dan analisis SEO dari file input menggunakan Gemini.",
-        epilog="Contoh: python my_generate_blog.py -i nama_file.vtt -p prompt_tutorial_subs.md -m gemini-1.5-pro-latest"
+        epilog="Contoh: python my_generate_blog.py -i nama_file.vtt -p prompt_tutorial_subs.md"
     )
 
     parser.add_argument(
@@ -246,13 +349,8 @@ def main():
         choices=['prompt_tutorial_odoo18.md', 'prompt_tutorial_subs.md', 'prompt_create_blog.md'],
         help="Pilih file prompt untuk konten blog. (Default: %(default)s)"
     )
-    parser.add_argument(
-        "-m", "--model",
-        default='gemini-1.5-flash-latest',
-        help="Model Gemini yang akan digunakan. (Default: %(default)s)"
-    )
     args = parser.parse_args()
-    run_generation_workflow(args.input, args.prompt, args.model)
+    run_generation_workflow(args.input, args.prompt)
 
 if __name__ == "__main__":
     main()
