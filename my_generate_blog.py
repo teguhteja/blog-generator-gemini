@@ -12,7 +12,6 @@ from PIL import Image
 from dotenv import load_dotenv
 from google.genai import types
 from io import BytesIO
-import base64
 
 def call_gemini(prompt_text, model_name):
     """
@@ -129,12 +128,12 @@ def parse_and_select_keyphrase(seo_content):
             print("\n❌ Pemilihan dibatalkan.")
             return None
 
-def run_generation_workflow(input_path, blog_prompt_path, model_config_path):
+def run_generation_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run):
     """
     Menjalankan alur kerja lengkap: membuat direktori, konten blog, dan analisis SEO.
     """
     # Langkah 0: Konfigurasi awal dan validasi path
-    print(f"🚀 Memulai alur kerja lengkap untuk '{input_path}'...")
+    print(f"🚀 Memulai alur kerja untuk '{input_path}' dengan langkah: {steps_to_run}")
     load_dotenv()
 
     if not os.path.exists(model_config_path):
@@ -162,9 +161,10 @@ def run_generation_workflow(input_path, blog_prompt_path, model_config_path):
         youtube_link = f"https://www.youtube.com/watch?v={youtube_code}"
         print(f"🔗 Tautan YouTube terdeteksi: {youtube_link}")
 
+    PROMPT_DIR = "prompt"
     # Definisikan semua path prompt yang dibutuhkan
-    keyphrase_prompt_path = "prompt_add_seo.md" # Prompt untuk mendapatkan keyphrase
-    # Validasi file prompt (file input sudah divalidasi di main)
+    keyphrase_prompt_path = os.path.join(PROMPT_DIR, "prompt_add_seo.md") # Prompt untuk mendapatkan keyphrase
+    # Validasi file prompt (blog_prompt_path sudah divalidasi di main)
     for path in [blog_prompt_path, keyphrase_prompt_path]:
         if not os.path.exists(path):
             print(f"❌ Error: File '{path}' tidak ditemukan.")
@@ -185,138 +185,208 @@ def run_generation_workflow(input_path, blog_prompt_path, model_config_path):
     print(f"✅ Direktori '{dir_name}' berhasil disiapkan.")
 
     # --- LANGKAH 1: Generate Draft ---
-    print("\n--- LANGKAH 1: Membuat Draf Tutorial ---")
-    with open(input_path, 'r', encoding='utf-8') as f:
-        input_content = f.read()
-    with open(blog_prompt_path, 'r', encoding='utf-8') as f:
-        blog_prompt_content = f.read()
+    if 1 in steps_to_run:
+        print("\n--- LANGKAH 1: Membuat Draf Tutorial ---")
+        with open(input_path, 'r', encoding='utf-8') as f:
+            input_content = f.read()
+        with open(blog_prompt_path, 'r', encoding='utf-8') as f:
+            blog_prompt_content = f.read()
 
-    final_blog_prompt = f"{blog_prompt_content}\n\n---\n\nKonteks dari file `{base_name}`:\n\n{input_content}"
-    blog_content = call_gemini(final_blog_prompt, model_config.get('model_tutorial', 'gemini-1.5-flash-latest'))
+        final_blog_prompt = f"{blog_prompt_content}\n\n---\n\nKonteks dari file `{base_name}`:\n\n{input_content}"
+        blog_content = call_gemini(final_blog_prompt, model_config.get('model_tutorial', 'gemini-1.5-flash-latest'))
 
-    if not blog_content:
-        print("❌ Gagal membuat draf, proses dihentikan.")
-        sys.exit(1)
-    with open(output_md_path, 'w', encoding='utf-8') as f:
-        f.write(blog_content)
-    print(f"✅ Draf berhasil dibuat dan disimpan di: {output_md_path}")
+        if blog_content:
+            with open(output_md_path, 'w', encoding='utf-8') as f:
+                f.write(blog_content)
+            print(f"✅ Draf berhasil dibuat dan disimpan di: {output_md_path}")
+        else:
+            print("❌ Gagal membuat draf, proses dihentikan.")
+            sys.exit(1)
 
     # --- LANGKAH 2: Get SEO Keyphrases ---
-    print("\n--- LANGKAH 2: Mendapatkan Keyphrase SEO ---")
-    with open(keyphrase_prompt_path, 'r', encoding='utf-8') as f:
-        keyphrase_prompt_content = f.read()
+    if 2 in steps_to_run:
+        print("\n--- LANGKAH 2: Mendapatkan Keyphrase SEO ---")
+        if not os.path.exists(output_md_path):
+            print(f"❌ Error: File draf '{output_md_path}' tidak ditemukan. Jalankan langkah 1 terlebih dahulu.")
+            sys.exit(1)
 
-    final_seo_prompt = f"{keyphrase_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_md_path)}`:\n\n{blog_content}"
-    seo_content = call_gemini(final_seo_prompt, model_config.get('model_seo', 'gemini-1.5-flash-latest'))
+        with open(output_md_path, 'r', encoding='utf-8') as f:
+            blog_content = f.read()
+        with open(keyphrase_prompt_path, 'r', encoding='utf-8') as f:
+            keyphrase_prompt_content = f.read()
 
-    if not seo_content:
-        print("❌ Gagal mendapatkan keyphrase SEO, proses dihentikan.")
-        sys.exit(1)
-    
-    content_to_write_seo = seo_content
-    if youtube_link:
-        content_to_write_seo = f"**Sumber Video:** {youtube_link}\n\n---\n\n{seo_content}"
-    with open(output_seo_path, 'w', encoding='utf-8') as f:
-        f.write(content_to_write_seo)
-    print(f"✅ Analisis Keyphrase SEO berhasil dibuat dan disimpan di: {output_seo_path}")
+        final_seo_prompt = f"{keyphrase_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_md_path)}`:\n\n{blog_content}"
+        seo_content = call_gemini(final_seo_prompt, model_config.get('model_seo', 'gemini-1.5-flash-latest'))
 
-    # --- Interaksi Pengguna: Memilih Keyphrase ---
-    selected_keyphrase = parse_and_select_keyphrase(seo_content)
-    if not selected_keyphrase:
-        print("⚠️ Tidak ada keyphrase yang dipilih. Alur kerja berhenti.")
-        sys.exit(0)
+        if seo_content:
+            content_to_write = seo_content
+            if youtube_link:
+                content_to_write = f"**Sumber Video:** {youtube_link}\n\n---\n\n{seo_content}"
+            with open(output_seo_path, 'w', encoding='utf-8') as f:
+                f.write(content_to_write)
+            print(f"✅ Analisis Keyphrase SEO berhasil dibuat dan disimpan di: {output_seo_path}")
+        else:
+            print("❌ Gagal mendapatkan keyphrase SEO, proses dihentikan.")
+            sys.exit(1)
+
+    # --- Persiapan untuk langkah 3, 4, 5: Memilih Keyphrase ---
+    selected_keyphrase = None
+    if any(step in steps_to_run for step in [3, 4, 5]):
+        if not os.path.exists(output_seo_path):
+            print(f"❌ Error: File SEO '{output_seo_path}' tidak ditemukan. Jalankan langkah 2 terlebih dahulu.")
+            sys.exit(1)
+        with open(output_seo_path, 'r', encoding='utf-8') as f:
+            seo_content_for_selection = f.read()
+        selected_keyphrase = parse_and_select_keyphrase(seo_content_for_selection)
+        if not selected_keyphrase:
+            print("⚠️ Tidak ada keyphrase yang dipilih. Melewatkan langkah-langkah berikutnya.")
+            sys.exit(0)
 
     # --- LANGKAH 3: Create Final Blog ---
-    print("\n--- LANGKAH 3: Membuat Blog Final ---")
-    create_blog_prompt_path = 'prompt_create_blog.md'
-    with open(create_blog_prompt_path, 'r', encoding='utf-8') as f:
-        create_blog_prompt_content = f.read()
-    
-    injected_create_blog_prompt = create_blog_prompt_content.format(selected_keyphrase)
-    final_blog_post_prompt = (
-        f"{injected_create_blog_prompt}\n\n---\n\n"
-        f"CONTEXT FROM ORIGINAL TRANSCRIPT (`{base_name}`):\n\n{input_content}\n\n"
-        f"---\n\n"
-        f"CONTEXT FROM DRAFT POST (`{os.path.basename(output_md_path)}`):\n\n{blog_content}"
-    )
-    final_blog_post_content = call_gemini(final_blog_post_prompt, model_config.get('model_blog', 'gemini-1.5-pro-latest'))
+    if 3 in steps_to_run:
+        print("\n--- LANGKAH 3: Membuat Blog Final ---")
+        if not os.path.exists(output_md_path) or not os.path.exists(input_path):
+            print(f"❌ Error: File draf '{output_md_path}' atau file input '{input_path}' tidak ditemukan. Jalankan langkah 1 terlebih dahulu.")
+            sys.exit(1)
 
-    if not final_blog_post_content:
-        print("❌ Gagal membuat blog post final.")
-        sys.exit(1)
+        with open(input_path, 'r', encoding='utf-8') as f:
+            input_content = f.read()
+        with open(output_md_path, 'r', encoding='utf-8') as f:
+            blog_content = f.read()
+        
+        create_blog_prompt_path = os.path.join(PROMPT_DIR, 'prompt_create_blog.md')
+        with open(create_blog_prompt_path, 'r', encoding='utf-8') as f:
+            create_blog_prompt_content = f.read()
+        
+        injected_create_blog_prompt = create_blog_prompt_content.format(selected_keyphrase)
+        final_blog_post_prompt = (
+            f"{injected_create_blog_prompt}\n\n---\n\n"
+            f"CONTEXT FROM ORIGINAL TRANSCRIPT (`{base_name}`):\n\n{input_content}\n\n"
+            f"---\n\n"
+            f"CONTEXT FROM DRAFT POST (`{os.path.basename(output_md_path)}`):\n\n{blog_content}"
+        )
+        final_blog_post_content = call_gemini(final_blog_post_prompt, model_config.get('model_blog', 'gemini-1.5-pro-latest'))
 
-    content_to_write_blog = final_blog_post_content
-    if youtube_link:
-        lines = content_to_write_blog.split('\n', 1)
-        title = lines[0]
-        body = lines[1] if len(lines) > 1 else ''
-        link_markdown = f"\n_Tonton video tutorial asli di YouTube_\n"
-        content_to_write_blog = f"{title}\n{link_markdown}\n{body}"
-    with open(output_blog_path, 'w', encoding='utf-8') as f:
-        f.write(content_to_write_blog)
-    print(f"✅ Blog post final berhasil dibuat dan disimpan di: {output_blog_path}")
+        if final_blog_post_content:
+            content_to_write = final_blog_post_content
+            if youtube_link:
+                lines = content_to_write.split('\n', 1)
+                title = lines[0]
+                body = lines[1] if len(lines) > 1 else ''
+                link_markdown = f"\n_Tonton video tutorial asli di YouTube_\n"
+                content_to_write = f"{title}\n{link_markdown}\n{body}"
+            with open(output_blog_path, 'w', encoding='utf-8') as f:
+                f.write(content_to_write)
+            print(f"✅ Blog post final berhasil dibuat dan disimpan di: {output_blog_path}")
+        else:
+            print("❌ Gagal membuat blog post final.")
+            sys.exit(1)
 
     # --- LANGKAH 4: Update SEO with Metadata ---
-    print("\n--- LANGKAH 4: Memperbarui SEO dengan Metadata ---")
-    seo_meta_prompt_path = 'prompt_create_seo.md'
-    with open(seo_meta_prompt_path, 'r', encoding='utf-8') as f:
-        seo_meta_prompt_content = f.read()
+    if 4 in steps_to_run:
+        print("\n--- LANGKAH 4: Memperbarui SEO dengan Metadata ---")
+        if not os.path.exists(output_blog_path):
+            print(f"❌ Error: File blog final '{output_blog_path}' tidak ditemukan. Jalankan langkah 3 terlebih dahulu.")
+            sys.exit(1)
 
-    final_seo_meta_prompt = f"{seo_meta_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_blog_path)}`:\n\n{final_blog_post_content}"
-    seo_meta_content = call_gemini(final_seo_meta_prompt, model_config.get('model_seo', 'gemini-1.5-pro-latest'))
+        with open(output_blog_path, 'r', encoding='utf-8') as f:
+            final_blog_post_content = f.read()
+        
+        seo_meta_prompt_path = os.path.join(PROMPT_DIR, 'prompt_create_seo.md')
+        with open(seo_meta_prompt_path, 'r', encoding='utf-8') as f:
+            seo_meta_prompt_content = f.read()
 
-    if seo_meta_content:
-        with open(output_seo_path, 'a', encoding='utf-8') as f:
-            f.write("\n\n---\n\n## SEO Metadata Lanjutan\n\n")
-            f.write(seo_meta_content)
-        print(f"✅ Metadata SEO lanjutan berhasil ditambahkan ke: {output_seo_path}")
-    else:
-        print("❌ Gagal membuat metadata SEO lanjutan.")
+        final_seo_meta_prompt = f"{seo_meta_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_blog_path)}`:\n\n{final_blog_post_content}"
+        seo_meta_content = call_gemini(final_seo_meta_prompt, model_config.get('model_seo', 'gemini-1.5-pro-latest'))
+
+        if seo_meta_content:
+            with open(output_seo_path, 'a', encoding='utf-8') as f:
+                f.write("\n\n---\n\n## SEO Metadata Lanjutan\n\n")
+                f.write(seo_meta_content)
+            print(f"✅ Metadata SEO lanjutan berhasil ditambahkan ke: {output_seo_path}")
+        else:
+            print("❌ Gagal membuat metadata SEO lanjutan.")
 
     # --- LANGKAH 5: Generate Image ---
-    print("\n--- LANGKAH 5: Membuat Gambar ---")
-    image_prompt_path = 'prompt_create_picture.md'
-    if not os.path.exists(image_prompt_path):
-        print(f"⚠️ Peringatan: File prompt '{image_prompt_path}' tidak ditemukan. Melewatkan pembuatan gambar.")
-    else:
-        with open(image_prompt_path, 'r', encoding='utf-8') as f:
-            image_prompt_content = f.read()
+    if 5 in steps_to_run:
+        print("\n--- LANGKAH 5: Membuat Gambar ---")
+        image_prompt_path = os.path.join(PROMPT_DIR, 'prompt_create_picture.md')
+        if not os.path.exists(image_prompt_path):
+            print(f"⚠️ Peringatan: File prompt '{image_prompt_path}' tidak ditemukan. Melewatkan pembuatan gambar.")
+        else:
+            with open(image_prompt_path, 'r', encoding='utf-8') as f:
+                image_prompt_content = f.read()
 
-        final_image_prompt = image_prompt_content.format(selected_keyphrase)
-        image_model = model_config.get('model_image', 'gemini-1.5-pro-latest')
-        print(f"ℹ️  Menggunakan model '{image_model}' untuk pembuatan gambar (ini mungkin memerlukan waktu lebih lama).")
-        generated_image = generate_image(final_image_prompt, model_name=image_model, api_key=api_key)
+            final_image_prompt = image_prompt_content.format(selected_keyphrase)
+            image_model = model_config.get('model_image', 'gemini-1.5-pro-latest')
+            print(f"ℹ️  Menggunakan model '{image_model}' untuk pembuatan gambar (ini mungkin memerlukan waktu lebih lama).")
+            generated_image = generate_image(final_image_prompt, model_name=image_model, api_key=api_key)
 
-        if generated_image:
-            image_filename = sanitize_filename(selected_keyphrase, 'png')
-            image_path = os.path.join(dir_name, image_filename)
-            generated_image.save(image_path)
-            print(f"✅ Gambar berhasil dibuat dan disimpan di: {image_path}")
-            resize_image(image_path)
+            if generated_image:
+                image_filename = sanitize_filename(selected_keyphrase, 'png')
+                image_path = os.path.join(dir_name, image_filename)
+                generated_image.save(image_path)
+                print(f"✅ Gambar berhasil dibuat dan disimpan di: {image_path}")
+                resize_image(image_path)
     
     print("\n🎉 Alur kerja selesai.")
 
 def main():
     """Fungsi utama untuk parsing argumen dan menjalankan skrip."""
+    PROMPT_DIR = "prompt"
+    MODEL_DIR = "model"
+    DEFAULT_PROMPT = "prompt_tutorial_odoo18.md"
+
+    if not os.path.isdir(PROMPT_DIR):
+        print(f"❌ Error: Direktori prompt '{PROMPT_DIR}/' tidak ditemukan.")
+        sys.exit(1)
+
+    prompt_choices = [f for f in os.listdir(PROMPT_DIR) if f.endswith('.md')]
+    if not prompt_choices:
+        print(f"❌ Error: Tidak ada file prompt (.md) yang ditemukan di direktori '{PROMPT_DIR}/'.")
+        sys.exit(1)
+
+    default_prompt_choice = DEFAULT_PROMPT if DEFAULT_PROMPT in prompt_choices else prompt_choices[0]
+
+    if not os.path.isdir(MODEL_DIR):
+        print(f"❌ Error: Direktori model '{MODEL_DIR}/' tidak ditemukan.")
+        sys.exit(1)
+
+    model_choices = [f for f in os.listdir(MODEL_DIR) if f.endswith('.json')]
+    if not model_choices:
+        print(f"❌ Error: Tidak ada file model (.json) yang ditemukan di direktori '{MODEL_DIR}/'.")
+        sys.exit(1)
+
+    default_model_choice = "model.json" if "model.json" in model_choices else model_choices[0]
+
     parser = argparse.ArgumentParser(
         description="Membuat artikel blog dan analisis SEO dari file input menggunakan Gemini.",
-        epilog="Contoh: python my_generate_blog.py -i nama_file.vtt -m custom_models.json"
+        epilog=f"Contoh: python my_generate_blog.py -i nama_file.txt -m {default_model_choice} --step 1 2"
     )
 
     parser.add_argument(
-        "-i", "--input", required=True, help="Path ke file input teks (misal: .txt, .vtt, .srt).", metavar="FILE_INPUT"
+        "-i", "--input", required=True, help="Path ke file input teks (misal: .txt).", metavar="FILE_INPUT"
     )
     parser.add_argument(
         "-p", "--prompt",
-        default='prompt_tutorial_odoo18.md',
-        choices=['prompt_tutorial_odoo18.md', 'prompt_tutorial_subs.md', 'prompt_create_blog.md'],
-        help="Pilih file prompt untuk konten blog. (Default: %(default)s)"
+        default=default_prompt_choice,
+        choices=prompt_choices,
+        help=f"Pilih file prompt dari direktori '{PROMPT_DIR}/'. (Default: %(default)s)"
     )
     parser.add_argument(
         "-m", "--model-config",
-        default='model.json',
-        help="Path ke file konfigurasi model JSON. (Default: %(default)s)",
-        metavar="MODEL_JSON"
+        default=default_model_choice,
+        choices=model_choices,
+        help=f"Pilih file konfigurasi model dari direktori '{MODEL_DIR}/'. (Default: %(default)s)"
+    )
+    parser.add_argument(
+        "--step",
+        nargs='+',
+        type=int,
+        default=[1, 2, 3, 4, 5],
+        choices=range(1, 6),
+        metavar='N',
+        help="Langkah yang akan dijalankan: 1.Generate Draft, 2.Get Keyphrases, 3.Create Blog, 4.Update SEO, 5.Generate Image. (Default: semua langkah)"
     )
     args = parser.parse_args()
 
@@ -329,7 +399,9 @@ def main():
     if not os.path.exists(args.input):
         parser.error(f"File input tidak ditemukan: {args.input}")
 
-    run_generation_workflow(args.input, args.prompt, args.model_config)
+    full_prompt_path = os.path.join(PROMPT_DIR, args.prompt)
+    full_model_config_path = os.path.join(MODEL_DIR, args.model_config)
+    run_generation_workflow(args.input, full_prompt_path, full_model_config_path, sorted(args.step))
 
 
 if __name__ == "__main__":
