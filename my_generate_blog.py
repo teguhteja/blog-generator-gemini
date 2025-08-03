@@ -2,60 +2,93 @@
 import argparse
 import os
 import sys
+import re
 import google.generativeai as genai
 from dotenv import load_dotenv
 
-def generate_folder(input_path,):
-    """Membuat direktori dan artikel blog menggunakan Gemini berdasarkan file input dan prompt."""
-
-    # 1. Ambil nama dasar file (misal: "nama_file.vtt" dari "path/to/nama_file.vtt")
-    base_name = os.path.basename(input_path)
-
-    # 2. Pisahkan nama file dari ekstensinya (misal: ("nama_file", ".vtt"))
-    dir_name, _ = os.path.splitext(base_name)
-
-    # Jika setelah dipisahkan namanya kosong (misal inputnya ".vtt"), jangan buat folder
-    if not dir_name:
-        print(f"Error: Nama file tidak valid untuk membuat direktori dari '{input_path}'")
-        return
-
-    # 3. Buat direktori. `exist_ok=True` agar tidak error jika direktori sudah ada.
-    try:
-        os.makedirs(dir_name, exist_ok=True)
-        print(f"✅ Direktori '{dir_name}' berhasil dibuat atau sudah ada.")
-    except OSError as e:
-        print(f"❌ Gagal membuat direktori: {e}")
-
-def generate_tutorial(input_path, prompt_path):
+def call_gemini(prompt_text, model_name):
     """
-    Membuat artikel tutorial menggunakan Gemini berdasarkan file input dan file prompt.
+    Memanggil Gemini API dengan prompt dan model tertentu.
 
     Args:
-        input_path (str): Path menuju file input (misal: .vtt).
-        prompt_path (str): Path menuju file prompt (.md).
+        prompt_text (str): Prompt lengkap untuk dikirim ke model.
+        model_name (str): Nama model yang akan digunakan.
+
+    Returns:
+        str: Respon teks dari model, atau None jika terjadi error.
     """
-    # Langkah 1: Muat API Key dari file .env
+    try:
+        print(f"\n🤖 Menghubungi Gemini dengan model '{model_name}'... (ini mungkin butuh beberapa saat)")
+        model = genai.GenerativeModel(model_name)
+        response = model.generate_content(prompt_text)
+        return response.text
+    except Exception as e:
+        print(f"❌ Terjadi kesalahan saat menghubungi Gemini API: {e}")
+        return None
+
+def parse_and_select_keyphrase(seo_content):
+    """
+    Mem-parsing konten SEO, menampilkan pilihan, dan meminta input pengguna.
+
+    Args:
+        seo_content (str): Teks mentah yang berisi daftar keyphrase bernomor.
+    """
+    # Mencari baris yang diawali dengan angka, titik, dan spasi
+    keyphrases = re.findall(r"^\s*\d+\.\s*(.*)", seo_content, re.MULTILINE)
+
+    if not keyphrases:
+        print("\n⚠️ Tidak dapat menemukan keyphrase bernomor pada hasil SEO.")
+        print("Isi file .seo.md adalah:")
+        print("--------------------")
+        print(seo_content)
+        print("--------------------")
+        return
+
+    print("\n💡 Silakan pilih Keyphrase SEO utama Anda dari daftar berikut:")
+    for i, phrase in enumerate(keyphrases):
+        print(f"  [{i+1}] {phrase.strip()}")
+
+    while True:
+        try:
+            choice = int(input(f"\nMasukkan pilihan Anda (1-{len(keyphrases)}): "))
+            if 1 <= choice <= len(keyphrases):
+                selected_phrase = keyphrases[choice - 1].strip()
+                print(f"\n✅ Anda memilih: \"{selected_phrase}\"")
+                break
+            else:
+                print(f"❌ Pilihan tidak valid. Harap masukkan angka antara 1 dan {len(keyphrases)}.")
+        except ValueError:
+            print("❌ Input tidak valid. Harap masukkan sebuah angka.")
+
+def run_generation_workflow(input_path, blog_prompt_path, model_name):
+    """
+    Menjalankan alur kerja lengkap: membuat direktori, konten blog, dan analisis SEO.
+    """
+    # Langkah 1: Konfigurasi awal dan validasi path
     load_dotenv()
     api_key = os.getenv("GANAI_API_KEY")
     if not api_key:
         print("❌ Error: Variabel GANAI_API_KEY tidak ditemukan di file .env Anda.")
         sys.exit(1)
-
     genai.configure(api_key=api_key)
 
-    # Langkah 2: Pastikan file input dan prompt ada
-    for path in [input_path, prompt_path]:
+    seo_prompt_path = 'prompt_add_seo.md'
+    for path in [input_path, blog_prompt_path, seo_prompt_path]:
         if not os.path.exists(path):
             print(f"❌ Error: File '{path}' tidak ditemukan.")
             sys.exit(1)
 
-    # Langkah 3: Siapkan nama direktori dan path file output
+    # Langkah 2: Siapkan nama direktori dan path file
     base_name = os.path.basename(input_path)
     dir_name, _ = os.path.splitext(base_name)
-    output_filename = f"{dir_name}.md"
-    output_path = os.path.join(dir_name, output_filename)
+    if not dir_name:
+        print(f"❌ Error: Nama file tidak valid untuk membuat direktori dari '{input_path}'")
+        sys.exit(1)
 
-    # Langkah 4: Buat direktori berdasarkan nama file input
+    output_md_path = os.path.join(dir_name, f"{dir_name}.md")
+    output_seo_path = os.path.join(dir_name, f"{dir_name}.seo.md")
+
+    # Langkah 3: Buat direktori
     try:
         os.makedirs(dir_name, exist_ok=True)
         print(f"✅ Direktori '{dir_name}' berhasil disiapkan.")
@@ -63,43 +96,57 @@ def generate_tutorial(input_path, prompt_path):
         print(f"❌ Gagal membuat direktori '{dir_name}': {e}")
         sys.exit(1)
 
+    # Langkah 4: Buat konten blog
     print(f"📖 Membaca file input: {input_path}")
-    print(f"📄 Membaca file prompt: {prompt_path}")
-
-    # Langkah 5: Baca konten dari kedua file
+    print(f"📄 Membaca file prompt blog: {blog_prompt_path}")
     try:
         with open(input_path, 'r', encoding='utf-8') as f:
             input_content = f.read()
-        with open(prompt_path, 'r', encoding='utf-8') as f:
-            prompt_content = f.read()
+        with open(blog_prompt_path, 'r', encoding='utf-8') as f:
+            blog_prompt_content = f.read()
     except Exception as e:
         print(f"❌ Error saat membaca file: {e}")
         sys.exit(1)
 
-    # Langkah 6: Gabungkan prompt dan konten file input menjadi satu prompt utuh
-    final_prompt = f"{prompt_content}\n\n---\n\nKonteks dari file `{base_name}`:\n\n{input_content}"
+    final_blog_prompt = f"{blog_prompt_content}\n\n---\n\nKonteks dari file `{base_name}`:\n\n{input_content}"
+    blog_content = call_gemini(final_blog_prompt, model_name)
 
-    # Langkah 7: Panggil Gemini API
+    if blog_content:
+        with open(output_md_path, 'w', encoding='utf-8') as f:
+            f.write(blog_content)
+        print(f"✅ Konten blog berhasil dibuat dan disimpan di: {output_md_path}")
+    else:
+        print("❌ Gagal membuat konten blog, proses dihentikan.")
+        sys.exit(1)
+
+    # Langkah 5: Buat analisis SEO
+    print(f"\n📄 Membaca file prompt SEO: {seo_prompt_path}")
     try:
-        print("\n🤖 Menghubungi Gemini untuk membuat konten... (ini mungkin butuh beberapa saat)")
-        model = genai.GenerativeModel('gemini-2.5-flash')
-        response = model.generate_content(final_prompt)
-
-        # Langkah 8: Simpan hasilnya ke file .md di dalam direktori yang sudah dibuat
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(response.text)
-
-        print(f"✅ Sukses! Konten berhasil dibuat dan disimpan di: {output_path}")
-
+        with open(seo_prompt_path, 'r', encoding='utf-8') as f:
+            seo_prompt_content = f.read()
     except Exception as e:
-        print(f"❌ Terjadi kesalahan saat menghubungi Gemini API: {e}")
+        print(f"❌ Error saat membaca file SEO prompt: {e}")
+        sys.exit(1)
+
+    # Menggunakan konten blog yang baru dibuat sebagai konteks untuk SEO
+    final_seo_prompt = f"{seo_prompt_content}\n\n---\n\nKonteks dari file `{os.path.basename(output_md_path)}`:\n\n{blog_content}"
+    seo_content = call_gemini(final_seo_prompt, model_name)
+
+    if seo_content:
+        with open(output_seo_path, 'w', encoding='utf-8') as f:
+            f.write(seo_content)
+        print(f"✅ Analisis SEO berhasil dibuat dan disimpan di: {output_seo_path}")
+        # Langkah 6: Parsing dan pilih keyphrase
+        parse_and_select_keyphrase(seo_content)
+    else:
+        print("❌ Gagal membuat analisis SEO.")
         sys.exit(1)
 
 def main():
     """Fungsi utama untuk parsing argumen dan menjalankan skrip."""
     parser = argparse.ArgumentParser(
-        description="Membuat artikel blog dari file input (misal: .vtt) menggunakan Gemini.",
-        epilog="Contoh: python my-generate-blog.py -i nama_file.vtt -p prompt_tutorial_subs.md"
+        description="Membuat artikel blog dan analisis SEO dari file input menggunakan Gemini.",
+        epilog="Contoh: python my_generate_blog.py -i nama_file.vtt -p prompt_tutorial_subs.md -m gemini-pro"
     )
 
     parser.add_argument(
@@ -108,12 +155,16 @@ def main():
     parser.add_argument(
         "-p", "--prompt",
         default='prompt_tutorial_odoo18.md',
-        choices=['prompt_tutorial_odoo18.md', 'prompt_tutorial_subs.md'],
-        help="Pilih file prompt. (Default: %(default)s)"
+        choices=['prompt_tutorial_odoo18.md', 'prompt_tutorial_subs.md', 'prompt_create_blog.md'],
+        help="Pilih file prompt untuk konten blog. (Default: %(default)s)"
+    )
+    parser.add_argument(
+        "-m", "--model",
+        default='gemini-2.5-flash',
+        help="Model Gemini yang akan digunakan. (Default: %(default)s)"
     )
     args = parser.parse_args()
-    generate_folder(args.input,)
-    generate_tutorial(args.input, args.prompt)
+    run_generation_workflow(args.input, args.prompt, args.model)
 
 if __name__ == "__main__":
     main()
