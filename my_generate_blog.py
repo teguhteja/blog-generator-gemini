@@ -6,12 +6,39 @@ import re
 import io
 import json
 import subprocess
+from datetime import datetime
 from google import genai as genai_image
 import google.generativeai as genai
 from PIL import Image
 from dotenv import load_dotenv
 from google.genai import types
 from io import BytesIO
+
+# Data harga berdasarkan dokumentasi resmi Google AI.
+# Ini digunakan untuk membuat estimasi biaya dan mencatatnya.
+MODEL_PRICING = {
+    "gemini-1.5-pro": {
+        "input_per_1k_chars": 0.0035, "output_per_1k_chars": 0.0105, "image_cost": 0.0180
+    },
+    "gemini-1.5-flash": {
+        "input_per_1k_chars": 0.00035, "output_per_1k_chars": 0.00105, "image_cost": 0.0
+    },
+    "gemini-1.0-pro": {
+        "input_per_1k_chars": 0.0005, "output_per_1k_chars": 0.0015, "image_cost": 0.0
+    },
+    # Model default jika tidak ditemukan
+    "default": {
+        "input_per_1k_chars": 0.0035, "output_per_1k_chars": 0.0105, "image_cost": 0.0180
+    }
+}
+
+def get_pricing(model_name):
+    """Mencari data harga untuk model tertentu, atau mengembalikan harga default."""
+    for key, value in MODEL_PRICING.items():
+        if key in model_name:
+            return value
+    return MODEL_PRICING["default"]
+
 
 def call_gemini(prompt_text, model_name):
     """
@@ -28,10 +55,38 @@ def call_gemini(prompt_text, model_name):
         print(f"\n🤖 Menghubungi Gemini dengan model '{model_name}'... (ini mungkin butuh beberapa saat)")
         model = genai.GenerativeModel(model_name)
         response = model.generate_content(prompt_text)
+        
+        # Catat penggunaan setelah panggilan berhasil
+        input_chars = len(prompt_text)
+        output_chars = len(response.text)
+        log_usage_and_cost(model_name, input_chars=input_chars, output_chars=output_chars)
+
         return response.text
     except Exception as e:
         print(f"❌ Terjadi kesalahan saat menghubungi Gemini API: {e}")
         return None
+
+def log_usage_and_cost(model_name, input_chars=0, output_chars=0, images_generated=0):
+    """Mencatat penggunaan API dan estimasi biaya ke file CSV."""
+    log_file = 'usage_log.csv'
+    
+    pricing = get_pricing(model_name)
+    input_cost = (input_chars / 1000) * pricing['input_per_1k_chars']
+    output_cost = (output_chars / 1000) * pricing['output_per_1k_chars']
+    image_cost = images_generated * pricing.get('image_cost', 0.0)
+    total_cost = input_cost + output_cost + image_cost
+
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    log_entry = f"{timestamp},{model_name},{input_chars},{output_chars},{images_generated},{total_cost:.6f}\n"
+
+    # Buat header jika file belum ada
+    if not os.path.exists(log_file):
+        with open(log_file, 'w', encoding='utf-8') as f:
+            f.write("Timestamp,Model,Input Chars,Output Chars,Images Generated,Estimated Cost ($)\n")
+
+    with open(log_file, 'a', encoding='utf-8') as f:
+        f.write(log_entry)
+    print(f"📝 Penggunaan dicatat. Estimasi biaya untuk panggilan ini: ${total_cost:.6f}")
 
 def generate_image(prompt_text, model_name, api_key):
     """
@@ -68,21 +123,50 @@ def generate_image(prompt_text, model_name, api_key):
 
 def sanitize_filename(text, extension):
     """
-    Mengubah teks menjadi nama file yang valid.
+    Mengubah teks menjadi nama file yang valid tanpa menggunakan '-'.
+    CATATAN: Versi ini mempertahankan spasi, yang tidak direkomendasikan untuk web.
     """
-    sanitized = re.sub(r'[^\w\s-]', '', text.lower()).strip()
-    sanitized = re.sub(r'[-\s]+', '-', sanitized)
+    # Hapus karakter non-alfanumerik (kecuali spasi) dan ubah ke huruf kecil.
+    sanitized = re.sub(r'[^\w\s]', '', text.lower()).strip()
+    # Ganti beberapa spasi yang berurutan dengan satu spasi tunggal.
+    sanitized = re.sub(r'\s+', ' ', sanitized)
     return f"{sanitized}.{extension}"
 
-def resize_image(image_path):
+def resize_image(image_path, target_kb=100):
     """
-    Mengubah ukuran gambar menggunakan ImageMagick.
+    Mengubah ukuran dan mengoptimalkan gambar untuk web menggunakan ImageMagick,
+    dengan menargetkan ukuran file di bawah `target_kb`.
     """
     try:
-        print(f"🖼️  Mengubah ukuran gambar: {image_path}")
-        command = ['convert', str(image_path), '-resize', '1024x720', '-quality', '100%', str(image_path)]
+        # Dapatkan ekstensi file untuk menentukan format
+        _, extension = os.path.splitext(image_path)
+        is_jpeg = extension.lower() in ['.jpg', '.jpeg']
+
+        print(f"🖼️  Mengoptimalkan gambar: {image_path} (Target: < {target_kb} KB)")
+
+        # Perintah dasar untuk mengubah ukuran dan menghapus metadata
+        # -resize '1024x720>' : hanya resize jika gambar lebih besar dari dimensi ini
+        # -strip : hapus semua data meta (EXIF, dll) untuk mengurangi ukuran
+        # -interlace Plane : membuat gambar progressive (baik untuk web)
+        command = [
+            'convert', str(image_path),
+            '-resize', '1024x720>',
+            '-strip',
+            '-interlace', 'Plane',
+        ]
+
+        # Opsi terbaik untuk JPEG: targetkan ukuran file secara langsung.
+        # ImageMagick akan mencoba mencapai target ini dengan menyesuaikan kualitas.
+        if is_jpeg:
+            command.extend(['-define', f'jpeg:extent={target_kb}kb'])
+        else: # Fallback untuk format lain seperti PNG
+            command.extend(['-quality', '85']) # Kualitas 85 adalah kompromi yang baik
+
+        command.append(str(image_path)) # Timpa file asli
         subprocess.run(command, check=True, capture_output=True, text=True)
-        print("✅ Gambar berhasil diubah ukurannya.")
+
+        final_size_kb = os.path.getsize(image_path) / 1024
+        print(f"✅ Gambar berhasil dioptimalkan. Ukuran akhir: {final_size_kb:.2f} KB.")
     except FileNotFoundError:
         print("⚠️  Peringatan: Perintah 'convert' (ImageMagick) tidak ditemukan.")
         print("   Gambar tidak diubah ukurannya. Silakan install ImageMagick untuk fungsionalitas penuh.")
@@ -229,22 +313,23 @@ def run_generation_workflow(input_path, blog_prompt_path, model_config_path, ste
             print("❌ Gagal mendapatkan keyphrase SEO, proses dihentikan.")
             sys.exit(1)
 
-    # --- Persiapan untuk langkah 3, 4, 5: Memilih Keyphrase ---
+    # --- Persiapan untuk langkah-langkah yang memerlukan keyphrase (3 & 5) ---
     selected_keyphrase = None
-    if any(step in steps_to_run for step in [3, 4, 5]):
-        if not os.path.exists(output_seo_path):
-            print(f"❌ Error: File SEO '{output_seo_path}' tidak ditemukan. Jalankan langkah 2 terlebih dahulu.")
-            sys.exit(1)
-        with open(output_seo_path, 'r', encoding='utf-8') as f:
-            seo_content_for_selection = f.read()
-        selected_keyphrase = parse_and_select_keyphrase(seo_content_for_selection)
-        if not selected_keyphrase:
-            print("⚠️ Tidak ada keyphrase yang dipilih. Melewatkan langkah-langkah berikutnya.")
-            sys.exit(0)
+    if any(step in steps_to_run for step in [3, 5]):
+        if os.path.exists(output_seo_path):
+            with open(output_seo_path, 'r', encoding='utf-8') as f:
+                seo_content_for_selection = f.read()
+            selected_keyphrase = parse_and_select_keyphrase(seo_content_for_selection)
+        else:
+            print(f"ℹ️  File SEO '{output_seo_path}' tidak ditemukan. Keyphrase perlu diinput manual jika diperlukan.")
 
     # --- LANGKAH 3: Create Final Blog ---
     if 3 in steps_to_run:
         print("\n--- LANGKAH 3: Membuat Blog Final ---")
+        if not selected_keyphrase:
+            print("❌ Error: Langkah 3 memerlukan keyphrase. Jalankan langkah 2 terlebih dahulu atau pastikan ada pilihan di file .seo.md.")
+            sys.exit(1)
+
         if not os.path.exists(output_md_path) or not os.path.exists(input_path):
             print(f"❌ Error: File draf '{output_md_path}' atau file input '{input_path}' tidak ditemukan. Jalankan langkah 1 terlebih dahulu.")
             sys.exit(1)
@@ -310,24 +395,48 @@ def run_generation_workflow(input_path, blog_prompt_path, model_config_path, ste
     # --- LANGKAH 5: Generate Image ---
     if 5 in steps_to_run:
         print("\n--- LANGKAH 5: Membuat Gambar ---")
-        image_prompt_path = os.path.join(PROMPT_DIR, 'prompt_create_picture.md')
-        if not os.path.exists(image_prompt_path):
-            print(f"⚠️ Peringatan: File prompt '{image_prompt_path}' tidak ditemukan. Melewatkan pembuatan gambar.")
+        keyphrase_for_image = selected_keyphrase
+        if not keyphrase_for_image:
+            print("⚠️ Keyphrase belum dipilih atau ditentukan.")
+            try:
+                keyphrase_for_image = input("   Masukkan keyphrase untuk gambar: ").strip()
+                if not keyphrase_for_image:
+                    print("❌ Input kosong, melewatkan pembuatan gambar.")
+                    keyphrase_for_image = None
+            except KeyboardInterrupt:
+                print("\n❌ Input dibatalkan, melewatkan pembuatan gambar.")
+                keyphrase_for_image = None
+
+        if keyphrase_for_image:
+            image_prompt_path = os.path.join(PROMPT_DIR, 'prompt_create_picture.md')
+            if not os.path.exists(image_prompt_path):
+                print(f"⚠️ Peringatan: File prompt '{image_prompt_path}' tidak ditemukan. Melewatkan pembuatan gambar.")
+            else:
+                with open(image_prompt_path, 'r', encoding='utf-8') as f:
+                    image_prompt_content = f.read()
+
+                final_image_prompt = image_prompt_content.format(keyphrase_for_image)
+                image_model = model_config.get('model_image', 'gemini-1.5-pro-latest')
+                print(f"ℹ️  Menggunakan keyphrase '{keyphrase_for_image}' dan model '{image_model}' untuk pembuatan gambar.")
+                generated_image = generate_image(final_image_prompt, model_name=image_model, api_key=api_key)
+
+                # Catat penggunaan setelah panggilan berhasil
+                if generated_image:
+                    log_usage_and_cost(image_model, input_chars=len(final_image_prompt), images_generated=1)
+
+                if generated_image:
+                    image_filename = sanitize_filename(keyphrase_for_image, 'jpg')
+                    image_path = os.path.join(dir_name, image_filename)
+
+                    if generated_image.mode == 'RGBA':
+                        print("ℹ️  Mengonversi gambar dari RGBA ke RGB untuk penyimpanan JPEG.")
+                        generated_image = generated_image.convert('RGB')
+
+                    generated_image.save(image_path, 'JPEG', quality=95)
+                    print(f"✅ Gambar berhasil dibuat dan disimpan di: {image_path}")
+                    resize_image(image_path, target_kb=100)
         else:
-            with open(image_prompt_path, 'r', encoding='utf-8') as f:
-                image_prompt_content = f.read()
-
-            final_image_prompt = image_prompt_content.format(selected_keyphrase)
-            image_model = model_config.get('model_image', 'gemini-1.5-pro-latest')
-            print(f"ℹ️  Menggunakan model '{image_model}' untuk pembuatan gambar (ini mungkin memerlukan waktu lebih lama).")
-            generated_image = generate_image(final_image_prompt, model_name=image_model, api_key=api_key)
-
-            if generated_image:
-                image_filename = sanitize_filename(selected_keyphrase, 'png')
-                image_path = os.path.join(dir_name, image_filename)
-                generated_image.save(image_path)
-                print(f"✅ Gambar berhasil dibuat dan disimpan di: {image_path}")
-                resize_image(image_path)
+            print("   Tidak ada keyphrase yang valid, pembuatan gambar dilewati.")
     
     print("\n🎉 Alur kerja selesai.")
 
@@ -365,7 +474,7 @@ def main():
     )
 
     parser.add_argument(
-        "-i", "--input", required=True, help="Path ke file input teks (misal: .txt).", metavar="FILE_INPUT"
+        "-i", "--input", required=True, help="Path ke file input (.txt). File selain .txt tidak diizinkan untuk menghemat kuota API.", metavar="FILE_INPUT"
     )
     parser.add_argument(
         "-p", "--prompt",
@@ -391,10 +500,10 @@ def main():
     args = parser.parse_args()
 
     # Validasi tipe file input
-    allowed_extensions = ['.txt', '.vtt', '.srt', '.md']
+    allowed_extensions = ['.txt']
     _, file_extension = os.path.splitext(args.input)
     if file_extension.lower() not in allowed_extensions:
-        parser.error(f"File input harus berupa file teks dengan ekstensi: {', '.join(allowed_extensions)}")
+        parser.error(f"File input harus berupa file .txt. Tipe file lain tidak diizinkan untuk menghemat kuota API.")
 
     if not os.path.exists(args.input):
         parser.error(f"File input tidak ditemukan: {args.input}")
