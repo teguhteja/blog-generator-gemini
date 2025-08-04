@@ -1,0 +1,6 @@
+Timestamp,Model,Input Chars,Output Chars,Images Generated,Estimated Cost ($)
+2025-08-04 08:38:52,gemini-2.0-flash,65978,9284,0,0.328405
+2025-08-04 08:38:54,gemini-2.0-flash,9729,361,0,0.037842
+2025-08-04 08:42:57,gemini-2.5-pro,76798,10749,0,0.381657
+2025-08-04 08:42:59,gemini-2.0-flash,12350,922,0,0.052906
+2025-08-04 08:43:09,gemini-2.0-flash-preview-image-generation,402,0,1,0.019407
