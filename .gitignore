@@ -4,3 +4,5 @@
 *.py
 *.webm
 *.pyc
+*.mkv
+usage_log.csv

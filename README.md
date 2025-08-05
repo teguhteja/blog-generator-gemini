@@ -74,7 +74,7 @@ The script is run from the terminal using `main.py`. All output files will be cr
 ### Basic Syntax
 
 ```bash
-python main.py -i "path/to/your_input_file.txt" [options]
+python main.py "path/to/your_input_file.txt" [options]
 ```
 
 ### Arguments
