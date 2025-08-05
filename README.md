@@ -1,116 +1,125 @@
-# Generator Artikel Blog Otomatis dengan Gemini AI
+# Automatic Blog Article Generator with Gemini AI
 
-Skrip Python untuk mengotomatisasi pembuatan artikel blog, analisis SEO, dan gambar pendukung dari file teks mentah (seperti transkrip video) menggunakan Google Gemini API.
+A Python script to automate the creation of blog articles, SEO analysis, and supporting images from raw text files (like video transcripts) using the Google Gemini API.
 
-Proyek ini dirancang untuk menjadi modular dan mudah dikonfigurasi, memungkinkan Anda untuk menghasilkan konten berkualitas tinggi dengan alur kerja yang efisien.
+This project is designed to be modular and easily configurable, allowing you to generate high-quality content with an efficient workflow.
 
-## Fitur Utama
+## Key Features
 
--   **Modular & Terstruktur**: Kode dipecah menjadi modul-modul logis di dalam direktori `lib` untuk kemudahan pemeliharaan dan pengembangan.
--   **Alur Kerja Bertahap**: Proses dibagi menjadi 5 langkah yang dapat dijalankan secara terpisah:
-    1.  **Pembuatan Draf**: Membuat draf artikel awal dari teks input.
-    2.  **Analisis SEO**: Menghasilkan daftar *keyphrase* SEO yang relevan.
-    3.  **Pembuatan Blog Final**: Menulis ulang draf menjadi artikel blog yang lengkap dan dioptimalkan untuk SEO berdasarkan *keyphrase* yang dipilih.
-    4.  **Pembaruan Metadata SEO**: Menambahkan metadata SEO tambahan (seperti meta deskripsi, tag) ke file analisis.
-    5.  **Pembuatan Gambar**: Menghasilkan gambar *featured* yang relevan untuk artikel.
--   **Kustomisasi Prompt**: Mudah mengubah gaya dan instruksi konten dengan mengedit file markdown di direktori `prompt/`.
--   **Konfigurasi Model Fleksibel**: Pilih model Gemini yang berbeda untuk tugas yang berbeda (misalnya, model 'flash' yang lebih murah untuk draf, model 'pro' yang lebih kuat untuk konten final) melalui file `model/model.json`.
--   **Optimalisasi Gambar**: Secara otomatis mengubah ukuran dan mengoptimalkan gambar yang dihasilkan untuk web (memerlukan ImageMagick).
--   **Pelacakan Biaya**: Mencatat estimasi biaya setiap panggilan API ke `usage_log.csv` untuk pemantauan anggaran.
+  - **Modular & Structured**: The code is broken down into logical modules within the `lib` directory for easy maintenance and development.
+  - **Step-by-Step Workflow**: The process is divided into 5 steps that can be run separately:
+    1.  **Draft Creation**: Creates an initial article draft from the input text.
+    2.  **SEO Analysis**: Generates a list of relevant SEO keyphrases.
+    3.  **Final Blog Post Generation**: Rewrites the draft into a complete, SEO-optimized blog article based on a chosen keyphrase.
+    4.  **SEO Metadata Update**: Adds additional SEO metadata (like meta description, tags) to the analysis file.
+    5.  **Image Generation**: Creates a relevant featured image for the article.
+    6.  **HTML Conversion**: Converts the final Markdown blog post into a clean HTML file.
+  - **Customizable Prompts**: Easily change the style and content instructions by editing the markdown files in the `prompt/` directory.
+  - **Flexible Model Configuration**: Choose different Gemini models for different tasks (e.g., the cheaper 'flash' model for drafts, the more powerful 'pro' model for the final content) via the `model/model.json` file.
+  - **Image Optimization**: Automatically resizes and optimizes generated images for the web (requires ImageMagick).
+  - **Cost Tracking**: Logs the estimated cost of each API call to `usage_log.csv` for budget monitoring.
 
-## Prasyarat
+## Prerequisites
 
-Sebelum memulai, pastikan Anda memiliki:
+Before you begin, ensure you have the following:
 
 1.  **Python 3.8+**
-2.  **Google Gemini API Key**: Dapatkan dari Google AI Studio.
-3.  **ImageMagick** (Opsional, tetapi sangat disarankan): Diperlukan untuk fungsionalitas optimalisasi gambar. Unduh dari situs resminya.
+2.  **Google Gemini API Key**: Get one from Google AI Studio.
+3.  **ImageMagick** (Optional, but highly recommended): Required for the image optimization functionality. Download from its official website.
 
-## Instalasi & Konfigurasi
+## Installation & Setup
 
-1.  **Clone Repositori**
+1.  **Clone the Repository**
 
     ```bash
-    git clone https://github.com/username/repo-name.git
+    git clone https://github.com/teguhteja/repo-name.git
     cd repo-name
     ```
 
-2.  **Buat dan Aktifkan Virtual Environment** (Sangat Disarankan)
+2.  **Create and Activate a Virtual Environment** (Highly Recommended)
 
     ```bash
-    # Buat environment
+    # Create the environment
     python -m venv venv
 
-    # Aktifkan di Windows
+    # Activate on Windows
     .\venv\Scripts\activate
 
-    # Aktifkan di macOS/Linux
+    # Activate on macOS/Linux
     source venv/bin/activate
     ```
 
-3.  **Install Dependensi**
+3.  **Install Dependencies**
 
-    Install semua pustaka Python yang diperlukan menggunakan file `requirements.txt`.
+    Install all required Python libraries using the `requirements.txt` file.
 
     ```bash
     pip install -r requirements.txt
     ```
 
-4.  **Siapkan API Key**
+4.  **Set Up Your API Key**
 
-    Buat file baru bernama `.env` di direktori utama proyek dan tambahkan API Key Anda.
+    Create a new file named `.env` in the project's root directory and add your API Key.
 
     **File: `.env`**
+
     ```
-    GANAI_API_KEY="AIzaSy...API_KEY_ANDA_DISINI"
+    GANAI_API_KEY="AIzaSy...YOUR_API_KEY_HERE"
     ```
 
-## Cara Menjalankan
+## How to Run
 
-Skrip dijalankan dari terminal menggunakan `main.py`. Semua file output akan dibuat dalam direktori baru yang namanya diambil dari nama file input.
+The script is run from the terminal using `main.py`. All output files will be created in a new directory named after the input file.
 
-### Sintaks Dasar
+### Basic Syntax
 
 ```bash
-python main.py -i "path/ke/file_input.txt" [opsi]
+python main.py -i "path/to/your_input_file.txt" [options]
 ```
 
-### Argumen
+### Arguments
 
--   `-i, --input`: **(Wajib)** Path ke file input `.txt`.
--   `-p, --prompt`: (Opsional) Nama file prompt dari direktori `prompt/`.
--   `-m, --model-config`: (Opsional) Nama file konfigurasi model dari direktori `model/`.
--   `--step`: (Opsional) Langkah spesifik yang ingin dijalankan (misal: `1 2 5`). Jika tidak ditentukan, semua langkah (1-5) akan dijalankan.
+  - `-i, --input`: **(Required)** Path to the input `.txt` file.
+  - `-p, --prompt`: (Optional) The name of a prompt file from the `prompt/` directory. Default: `prompt`.
+  - `-m, --model-config`: (Optional) The name of a model configuration file from the `model/` directory.
+  - `--step`: (Optional) The specific steps you want to run (e.g., `1 2 6`). If not specified, all steps (1-6) will be executed.
 
-### Contoh Penggunaan
+### Example Usage
 
-1.  **Menjalankan semua langkah (default):**
-
-    ```bash
-    python main.py -i "transkrip saya [video_id].txt"
-    ```
-
-2.  **Hanya membuat draf (langkah 1) dan analisis SEO (langkah 2):**
+1.  **Run all steps (default) from a local file:**
 
     ```bash
-    python main.py -i "transkrip saya.txt" --step 1 2
+    python main.py -i "my transcript [video_id].txt"
     ```
 
-3.  **Hanya membuat gambar (langkah 5):**
-    *(Jika langkah 2 belum dijalankan, skrip akan meminta Anda memasukkan keyphrase secara manual)*
+2.  **Only create a draft (step 1) and SEO analysis (step 2):**
 
     ```bash
-    python main.py -i "transkrip saya.txt" --step 5
+    python main.py -i "my transcript.txt" --step 1 2
     ```
 
-## Struktur Output
+3.  **Only create an image (step 5):**
+    *(If step 2 has not been run, the script will prompt you to manually enter a keyphrase)*
 
-Untuk setiap file input, misalnya `artikel-keren.txt`, skrip akan membuat struktur berikut:
+    ```bash
+    python main.py -i "my transcript.txt" --step 5
+    ```
+
+4.  **Generate the final blog and convert it to HTML (steps 3 and 6):**
+
+    ```bash
+    python main.py -i "my transcript.txt" --step 3 6
+    ```
+
+## Output Structure
+
+For each input file, for example `cool-article.txt`, the script will create the following structure:
 
 ```
-artikel-keren/
-├── artikel-keren.md         # Draf awal
-├── artikel-keren.seo.md     # Analisis & metadata SEO
-├── artikel-keren.blog.md    # Artikel blog final
-└── keyphrase utama.jpg      # Gambar yang dihasilkan
+cool-article/
+├── cool-article.md         # Initial draft
+├── cool-article.seo.md     # SEO analysis & metadata
+├── cool-article.blog.md    # Final blog article
+├── cool-article.html       # HTML version of the blog
+└── main keyphrase.jpg      # Generated image
 ```

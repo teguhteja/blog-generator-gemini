@@ -29,6 +29,7 @@ __CONSTRAINTS__
 - Add short and concise paragraphs for better readability and UX.
 - Remove information about vtt, srt, or subtitle files
 - Don't use cite
+- Add the source video link from the context at the beginning of the article.
 
 __CONTEXT__
 - Extract the file I uploaded and use it as context.
