@@ -1,8 +1,9 @@
 .env
 *.mkv
 *.pyc
-*.py
 *.webm
 *.pyc
 *.mkv
 usage_log.csv
+Claude.md
+todo.md
