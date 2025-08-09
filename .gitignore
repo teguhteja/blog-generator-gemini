@@ -4,7 +4,10 @@
 *.webm
 *.pyc
 *.mkv
+*.vtt
+*.mp4
 usage_log.csv
-Claude.md
-todo.md
-video/*
+vibe/
+video/
+owl-odoo-video/
+.vscode/

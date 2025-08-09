@@ -103,8 +103,8 @@ def format_time_vtt(seconds):
     milliseconds = int((seconds % 1) * 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{milliseconds:03d}"
 
-def download_subtitles(video_id, subtitle_format='txt', language='en'):
-    """Download subtitles for a YouTube video"""
+def download_subtitles(video_id, subtitle_formats=['txt'], language='en'):
+    """Download subtitles for a YouTube video in one or more formats"""
     try:
         api = YouTubeTranscriptApi()
         
@@ -114,29 +114,35 @@ def download_subtitles(video_id, subtitle_format='txt', language='en'):
             try:
                 transcript_data = api.fetch(video_id, languages=['en'])
                 print(f"Warning: {language} subtitles not found, using English instead")
+                language = 'en'
             except:
                 try:
                     transcript_list = api.list(video_id)
                     available_langs = [t.language_code for t in transcript_list]
                     if available_langs:
-                        transcript_data = api.fetch(video_id, languages=[available_langs[0]])
-                        print(f"Warning: Using available language: {available_langs[0]}")
+                        language = available_langs[0]
+                        transcript_data = api.fetch(video_id, languages=[language])
+                        print(f"Warning: Using available language: {language}")
                     else:
                         raise Exception("No transcripts available for this video")
                 except Exception as inner_e:
                     raise Exception(f"No transcripts available for this video: {str(inner_e)}")
         
-        formatted_content = format_subtitle_content(transcript_data.to_raw_data(), subtitle_format)
-        
-        # Get video title and create filename
+        transcript_data_raw = transcript_data.to_raw_data()
         title = get_video_title(video_id)
-        filename = f"{title} [{video_id}].{language}.{subtitle_format}"
-        
-        with open(filename, 'w', encoding='utf-8') as f:
-            f.write(formatted_content)
-        
-        print(f"Subtitles downloaded successfully: {filename}")
-        return filename
+        downloaded_files = []
+
+        for subtitle_format in set(subtitle_formats):
+            formatted_content = format_subtitle_content(transcript_data_raw, subtitle_format)
+            filename = f"{title} [{video_id}].{language}.{subtitle_format}"
+            
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(formatted_content)
+            
+            print(f"Subtitles downloaded successfully: {filename}")
+            downloaded_files.append(filename)
+            
+        return downloaded_files
         
     except Exception as e:
         print(f"Error downloading subtitles: {str(e)}")
@@ -149,6 +155,7 @@ def main():
         epilog="""Examples:
   python get_subs_youtube.py https://youtu.be/dQw4w9WgXcQ
   python get_subs_youtube.py dQw4w9WgXcQ -sf srt
+  python get_subs_youtube.py dQw4w9WgXcQ -sf srt vtt txt
   python get_subs_youtube.py https://youtube.com/watch?v=dQw4w9WgXcQ -sl id -sf vtt
 
 Supported formats: srt, vtt, txt
@@ -158,7 +165,7 @@ Common language codes: en, id, es, fr, de, ja, ko, zh
     parser.add_argument('-sl', '--sub-language', default='en', 
                        help='Subtitle language code (default: en)')
     parser.add_argument('-sf', '--subtitle-format', choices=['srt', 'vtt', 'txt'], 
-                       default='txt', help='Subtitle format (default: txt)')
+                       nargs='+', default=['txt'], help='One or more subtitle formats (e.g., srt vtt txt). Default: txt')
     
     args = parser.parse_args()
     
@@ -168,15 +175,17 @@ Common language codes: en, id, es, fr, de, ja, ko, zh
         sys.exit(1)
     
     print(f"Downloading subtitles for video ID: {video_id}")
-    print(f"Format: {args.subtitle_format}")
+    print(f"Formats: {', '.join(args.subtitle_format)}")
     print(f"Language: {args.sub_language}")
     
-    result = download_subtitles(video_id, args.subtitle_format, args.sub_language)
+    results = download_subtitles(video_id, args.subtitle_format, args.sub_language)
     
-    if result:
-        print(f"Download completed: {result}")
+    if results:
+        print(f"\nDownload completed for:")
+        for result in results:
+            print(f"- {result}")
     else:
-        print("Download failed")
+        print("\nDownload failed")
         sys.exit(1)
 
 if __name__ == "__main__":

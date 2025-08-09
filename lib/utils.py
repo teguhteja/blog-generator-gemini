@@ -60,15 +60,17 @@ def sanitize_filename(text, extension):
     sanitized = re.sub(r'\s+', ' ', sanitized)
     return f"{sanitized}.{extension}"
 
-def parse_and_select_keyphrase(seo_content):
+def parse_and_select_keyphrase(seo_content, choice=None):
     """
-    Mem-parsing konten SEO, menampilkan pilihan, dan meminta input pengguna.
+    Mem-parsing konten SEO dan memilih keyphrase berdasarkan pilihan.
 
     Args:
         seo_content (str): Teks mentah yang berisi daftar keyphrase bernomor.
+        choice (int, optional): 1-5 untuk memilih keyphrase berdasarkan nomor,
+                               0 untuk pemilihan manual, None untuk auto-select skor tertinggi.
     
     Returns:
-        str: Keyphrase yang dipilih oleh pengguna, atau None jika tidak ada yang dipilih.
+        str: Keyphrase yang dipilih (tanpa skor), atau None jika tidak ada yang dipilih.
     """
     # Mencari baris yang diawali dengan angka, titik, dan spasi
     keyphrases = re.findall(r"^\s*\d+\.\s*(.*)", seo_content, re.MULTILINE)
@@ -81,19 +83,57 @@ def parse_and_select_keyphrase(seo_content):
         print("--------------------")
         return None
 
-    print("\n💡 Silakan pilih Keyphrase SEO utama Anda dari daftar berikut:")
-    for i, phrase in enumerate(keyphrases):
-        print(f"  [{i+1}] {phrase.strip()}")
+    # Parse keyphrase dan skor
+    parsed_keyphrases = []
+    for phrase in keyphrases:
+        # Cari pola skor dalam format (skor: X.X) atau (score: X.X) di akhir
+        score_match = re.search(r'\((?:skor|score):\s*(\d+(?:\.\d+)?)\)', phrase.strip(), re.IGNORECASE)
+        if score_match:
+            score = float(score_match.group(1))
+            # Hapus skor dari keyphrase
+            clean_phrase = re.sub(r'\s*\((?:skor|score):\s*\d+(?:\.\d+)?\)', '', phrase.strip(), flags=re.IGNORECASE)
+        else:
+            score = 0.0
+            clean_phrase = phrase.strip()
+        
+        parsed_keyphrases.append((clean_phrase, score))
 
-    while True:
-        try:
-            choice = int(input(f"\nMasukkan pilihan Anda (1-{len(keyphrases)}): "))
-            if 1 <= choice <= len(keyphrases):
-                selected_phrase = keyphrases[choice - 1].strip()
-                print(f"\n✅ Anda memilih: \"{selected_phrase}\"")
-                return selected_phrase
-            else:
-                print(f"❌ Pilihan tidak valid. Harap masukkan angka antara 1 dan {len(keyphrases)}.")
-        except (ValueError, KeyboardInterrupt):
-            print("\n❌ Pemilihan dibatalkan.")
+    if not parsed_keyphrases:
+        print("\n⚠️ Tidak dapat mem-parsing keyphrase dari hasil SEO.")
+        return None
+
+    # Logika pemilihan berdasarkan parameter choice
+    if choice is None:
+        # Auto-select keyphrase dengan skor tertinggi
+        selected_phrase, highest_score = max(parsed_keyphrases, key=lambda x: x[1])
+        print(f"\n🎯 Keyphrase dengan skor tertinggi dipilih secara otomatis: \"{selected_phrase}\" (skor: {highest_score})")
+        return selected_phrase
+    
+    elif choice == 0:
+        # Pemilihan manual
+        print("\n💡 Silakan pilih Keyphrase SEO utama Anda dari daftar berikut:")
+        for i, (phrase, score) in enumerate(parsed_keyphrases):
+            print(f"  [{i+1}] {phrase} (skor: {score})")
+
+        while True:
+            try:
+                manual_choice = int(input(f"\nMasukkan pilihan Anda (1-{len(parsed_keyphrases)}): "))
+                if 1 <= manual_choice <= len(parsed_keyphrases):
+                    selected_phrase, score = parsed_keyphrases[manual_choice - 1]
+                    print(f"\n✅ Anda memilih: \"{selected_phrase}\"")
+                    return selected_phrase
+                else:
+                    print(f"❌ Pilihan tidak valid. Harap masukkan angka antara 1 dan {len(parsed_keyphrases)}.")
+            except (ValueError, KeyboardInterrupt):
+                print("\n❌ Pemilihan dibatalkan.")
+                return None
+    
+    else:
+        # Pilih langsung berdasarkan nomor (1-5)
+        if 1 <= choice <= len(parsed_keyphrases):
+            selected_phrase, score = parsed_keyphrases[choice - 1]
+            print(f"\n✅ Keyphrase #{choice} dipilih: \"{selected_phrase}\" (skor: {score})")
+            return selected_phrase
+        else:
+            print(f"\n❌ Pilihan #{choice} tidak valid. Hanya ada {len(parsed_keyphrases)} keyphrase tersedia.")
             return None

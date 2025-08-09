@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # Impor modul dari direktori lib
 from lib import workflow_steps, utils
 
-def run_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run):
+def run_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run, seo_keyphrase_choice=None):
     """
     Mengorkestrasi alur kerja pembuatan blog dengan memanggil fungsi dari modul.
     """
@@ -67,7 +67,7 @@ def run_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run):
         if os.path.exists(output_seo_path):
             with open(output_seo_path, 'r', encoding='utf-8') as f:
                 seo_content_for_selection = f.read()
-            selected_keyphrase = utils.parse_and_select_keyphrase(seo_content_for_selection)
+            selected_keyphrase = utils.parse_and_select_keyphrase(seo_content_for_selection, seo_keyphrase_choice)
         else:
             print(f"ℹ️  File SEO '{output_seo_path}' tidak ditemukan. Keyphrase perlu diinput manual jika diperlukan.")
 
@@ -132,6 +132,7 @@ def main():
     parser.add_argument("-p", "--prompt", choices=prompt_choices, help=f"Pilih file prompt dari '{PROMPT_DIR}/'. (Default: auto-select berdasarkan konten)")
     parser.add_argument("-m", "--model-config", default=default_model_choice, choices=model_choices, help=f"Pilih file konfigurasi model dari '{MODEL_DIR}/'. (Default: %(default)s)")
     parser.add_argument("--step", nargs='+', type=int, default=list(range(1, 7)), choices=range(1, 7), metavar='N', help="Langkah yang akan dijalankan: 1.Draft, 2.Keyphrases, 3.Blog, 4.Update SEO, 5.Image. 6.HTML (Default: semua)")
+    parser.add_argument("-sk", "--seo-keyphrase", type=int, choices=range(0, 6), metavar='N', help="Pilih keyphrase SEO: 1-5 untuk memilih langsung, 0 untuk pemilihan manual (Default: auto-select skor tertinggi)")
     args = parser.parse_args()
 
     if not args.input.lower().endswith('.txt'):
@@ -166,7 +167,7 @@ def main():
     full_prompt_path = os.path.join(PROMPT_DIR, args.prompt)
     full_model_config_path = os.path.join(MODEL_DIR, args.model_config)
 
-    run_workflow(args.input, full_prompt_path, full_model_config_path, sorted(list(set(args.step))))
+    run_workflow(args.input, full_prompt_path, full_model_config_path, sorted(list(set(args.step))), args.seo_keyphrase)
 
 if __name__ == "__main__":
     main()

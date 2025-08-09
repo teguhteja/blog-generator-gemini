@@ -1,125 +1,131 @@
-# Automatic Blog Article Generator with Gemini AI
+# Automatic Blog Post Generator from YouTube Videos
 
-A Python script to automate the creation of blog articles, SEO analysis, and supporting images from raw text files (like video transcripts) using the Google Gemini API.
-
-This project is designed to be modular and easily configurable, allowing you to generate high-quality content with an efficient workflow.
+This project automates the creation of blog articles, complete with SEO analysis and supporting images, directly from YouTube video subtitles. It uses the Google Gemini API to generate high-quality content and streamlines the workflow from video to blog post.
 
 ## Key Features
 
-  - **Modular & Structured**: The code is broken down into logical modules within the `lib` directory for easy maintenance and development.
-  - **Step-by-Step Workflow**: The process is divided into 5 steps that can be run separately:
-    1.  **Draft Creation**: Creates an initial article draft from the input text.
-    2.  **SEO Analysis**: Generates a list of relevant SEO keyphrases.
-    3.  **Final Blog Post Generation**: Rewrites the draft into a complete, SEO-optimized blog article based on a chosen keyphrase.
-    4.  **SEO Metadata Update**: Adds additional SEO metadata (like meta description, tags) to the analysis file.
+- **YouTube Subtitle Downloader**: Fetches and cleans subtitles from any YouTube video.
+- **Modular & Structured**: Code is organized into logical modules within the `lib` directory for easy maintenance and extension.
+- **Step-by-Step Workflow**: The content generation process is divided into distinct steps:
+    1.  **Draft Creation**: Creates an initial article draft from the video transcript.
+    2.  **SEO Analysis**: Generates a list of relevant SEO keywords.
+    3.  **Final Blog Post Generation**: Rewrites the draft into a complete, SEO-optimized blog article.
+    4.  **SEO Metadata Update**: Adds meta descriptions and tags.
     5.  **Image Generation**: Creates a relevant featured image for the article.
     6.  **HTML Conversion**: Converts the final Markdown blog post into a clean HTML file.
-  - **Customizable Prompts**: Easily change the style and content instructions by editing the markdown files in the `prompt/` directory.
-  - **Flexible Model Configuration**: Choose different Gemini models for different tasks (e.g., the cheaper 'flash' model for drafts, the more powerful 'pro' model for the final content) via the `model/model.json` file.
-  - **Image Optimization**: Automatically resizes and optimizes generated images for the web (requires ImageMagick).
-  - **Cost Tracking**: Logs the estimated cost of each API call to `usage_log.csv` for budget monitoring.
+- **Customizable Prompts**: Easily tailor the style and content by editing the Markdown files in the `prompt/` directory.
+- **Flexible Model Configuration**: Choose different Gemini models for different tasks (e.g., 'flash' for drafts, 'pro' for final content) via the `model/model.json` file.
+- **Image Optimization**: Automatically resizes and optimizes generated images for the web (requires ImageMagick).
+- **Cost Tracking**: Logs the estimated cost of each API call to `usage_log.csv`.
+
+## Project Structure
+
+```
+/
+├── lib/                # Core Python modules for each step
+├── model/              # Gemini model configurations (JSON)
+├── prompt/             # Markdown files with prompts for the AI
+├── video/              # Default output directory for generated content
+├── get_subs_youtube.py # Script to download YouTube subtitles
+├── main.py             # Main script to run the blog generation workflow
+└── README.md           # This file
+```
+
+## Modules in `lib/`
+
+- `download_subs.py`: Handles downloading and cleaning of YouTube video subtitles.
+- `gemini_api.py`: Manages all interactions with the Google Gemini API.
+- `my_generate_blog.py`: Contains the main logic for generating the blog post from a draft.
+- `workflow_steps.py`: Defines the individual steps of the content generation process.
+- `image_processing.py`: Handles image generation and optimization.
+- `utils.py`: Provides helper functions used across the project.
 
 ## Prerequisites
 
-Before you begin, ensure you have the following:
-
 1.  **Python 3.8+**
-2.  **Google Gemini API Key**: Get one from Google AI Studio.
-3.  **ImageMagick** (Optional, but highly recommended): Required for the image optimization functionality. Download from its official website.
+2.  **Google Gemini API Key**: Get one from [Google AI Studio](https://aistudio.google.com/).
+3.  **ImageMagick** (Optional, for image optimization): Download from its [official website](https://imagemagick.org/).
 
 ## Installation & Setup
 
 1.  **Clone the Repository**
-
     ```bash
-    git clone https://github.com/teguhteja/repo-name.git
-    cd repo-name
+    git clone https://github.com/your-username/your-repo-name.git
+    cd your-repo-name
     ```
 
-2.  **Create and Activate a Virtual Environment** (Highly Recommended)
-
+2.  **Create and Activate a Virtual Environment**
     ```bash
-    # Create the environment
     python -m venv venv
-
-    # Activate on Windows
-    .\venv\Scripts\activate
-
-    # Activate on macOS/Linux
-    source venv/bin/activate
+    # On Windows: .\venv\Scripts\activate
+    # On macOS/Linux: source venv/bin/activate
     ```
 
 3.  **Install Dependencies**
-
-    Install all required Python libraries using the `requirements.txt` file.
-
     ```bash
     pip install -r requirements.txt
     ```
 
 4.  **Set Up Your API Key**
-
-    Create a new file named `.env` in the project's root directory and add your API Key.
-
-    **File: `.env`**
-
+    Create a `.env` file in the root directory and add your API key:
     ```
-    GANAI_API_KEY="AIzaSy...YOUR_API_KEY_HERE"
+    GANAI_API_KEY="your_api_key_here"
     ```
 
 ## How to Run
 
-The script is run from the terminal using `main.py`. All output files will be created in a new directory named after the input file.
+The workflow is a two-step process:
 
-### Basic Syntax
+### Step 1: Download Subtitles
+
+First, download the subtitles from a YouTube video. This will create a `.txt` file in the project directory.
 
 ```bash
-python main.py "path/to/your_input_file.txt" [options]
+python get_subs_youtube.py [YOUTUBE_VIDEO_URL]
+```
+This will generate a file like `Video Title [video_id].txt`.
+
+### Step 2: Generate Blog Post
+
+Next, use the generated text file as input for the main script.
+
+#### Basic Syntax
+```bash
+python main.py -i "path/to/your_input_file.txt" [options]
 ```
 
-### Arguments
+#### Arguments
+- `-i, --input`: **(Required)** Path to the input `.txt` file.
+- `-p, --prompt`: (Optional) The name of a prompt file from the `prompt/` directory. Default: `prompt`.
+- `-m, --model-config`: (Optional) The name of a model configuration file from the `model/` directory.
+- `--step`: (Optional) The specific steps to run (e.g., `1 2 6`). If not specified, all steps (1-6) will be executed.
 
-  - `-i, --input`: **(Required)** Path to the input `.txt` file.
-  - `-p, --prompt`: (Optional) The name of a prompt file from the `prompt/` directory. Default: `prompt`.
-  - `-m, --model-config`: (Optional) The name of a model configuration file from the `model/` directory.
-  - `--step`: (Optional) The specific steps you want to run (e.g., `1 2 6`). If not specified, all steps (1-6) will be executed.
+#### Example Usage
 
-### Example Usage
-
-1.  **Run all steps (default) from a local file:**
-
+1.  **Run all steps on the downloaded transcript:**
     ```bash
-    python main.py -i "my transcript [video_id].txt"
+    python main.py -i "Video Title [video_id].txt"
     ```
 
 2.  **Only create a draft (step 1) and SEO analysis (step 2):**
-
     ```bash
-    python main.py -i "my transcript.txt" --step 1 2
+    python main.py -i "Video Title [video_id].txt" --step 1 2
     ```
 
-3.  **Only create an image (step 5):**
-    *(If step 2 has not been run, the script will prompt you to manually enter a keyphrase)*
-
+3.  **Generate the final blog and convert it to HTML (steps 3 and 6):**
     ```bash
-    python main.py -i "my transcript.txt" --step 5
-    ```
-
-4.  **Generate the final blog and convert it to HTML (steps 3 and 6):**
-
-    ```bash
-    python main.py -i "my transcript.txt" --step 3 6
+    python main.py -i "Video Title [video_id].txt" --step 3 6
     ```
 
 ## Output Structure
 
-For each input file, for example `cool-article.txt`, the script will create the following structure:
+For an input file named `My Video [12345].txt`, the script will create the following structure in the `video/` directory:
 
 ```
-cool-article/
-├── cool-article.md         # Initial draft
-├── cool-article.seo.md     # SEO analysis & metadata
-├── cool-article.blog.md    # Final blog article
-├── cool-article.html       # HTML version of the blog
-└── main keyphrase.jpg      # Generated image
+video/My Video [12345]/
+├── My Video [12345].md         # Initial draft
+├── My Video [12345].seo.md     # SEO analysis & metadata
+├── My Video [12345].blog.md    # Final blog article
+├── My Video [12345].html       # HTML version of the blog
+└── main_keyphrase.jpg          # Generated image
 ```
