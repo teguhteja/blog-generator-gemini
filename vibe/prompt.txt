@@ -1,0 +1,22 @@
+__TASK__
+Create a Python script named 'send_html_to_wordpress.py' that can automate posting to a WordPress site. The script should read content from an HTML file, upload local images to the WordPress media library, update the image URLs in the HTML content, and then post the final content to the WordPress site.
+
+__INPUTS__
+- A file named 'post.html' containing the post content.
+- A directory named 'images/' containing all local images referenced in 'post.html'.
+
+__REQUIREMENTS__
+- The script must use the 'requests' library.
+- It should handle authentication using a username and an application password.
+- It must first upload images from the 'images/' directory to the WordPress media library.
+- After uploading, it must replace local image paths (e.g., `<img src="images/my-image.jpg">`) with the new WordPress media URL.
+- Finally, it must send the updated HTML content as a new post to the WordPress REST API.
+- The script should be well-commented and easy to understand.
+
+__PLACEHOLDERS__
+- URL: https://[your_wordpress_site]/wp-json/wp/v2/posts
+- USERNAME: [your_username]
+- APPLICATION_PASSWORD: [your_app_password]
+
+__RESPONSE_FORMAT__
+- Provide the complete Python script for `send_html_to_wordpress.py`.

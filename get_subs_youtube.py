@@ -35,6 +35,14 @@ def extract_video_id(url_or_code):
     
     return None
 
+def extract_video_id_from_filename(filename):
+    """Extract YouTube video ID from filename format: 'name [code].mp4'"""
+    pattern = r'\[([0-9A-Za-z_-]{11})\]'
+    match = re.search(pattern, filename)
+    if match:
+        return match.group(1)
+    return None
+
 def get_video_title(video_id):
     """Get YouTube video title from video ID"""
     try:
@@ -106,29 +114,41 @@ def format_time_vtt(seconds):
 def download_subtitles(video_id, subtitle_formats=['txt'], language='en'):
     """Download subtitles for a YouTube video in one or more formats"""
     try:
-        api = YouTubeTranscriptApi()
+        transcript_data_raw = None
         
+        # Method 1: Use the correct modern API as per documentation
+        ytt_api = YouTubeTranscriptApi()
+        
+        # Try to get the requested language first
         try:
-            transcript_data = api.fetch(video_id, languages=[language])
+            fetched_transcript = ytt_api.fetch(video_id, languages=[language])
+            transcript_data_raw = fetched_transcript.to_raw_data()
         except:
+            # Try English as fallback
             try:
-                transcript_data = api.fetch(video_id, languages=['en'])
+                fetched_transcript = ytt_api.fetch(video_id, languages=['en'])
+                transcript_data_raw = fetched_transcript.to_raw_data()
                 print(f"Warning: {language} subtitles not found, using English instead")
                 language = 'en'
-            except:
+            except Exception as inner_e:
+                # Method 2: Try with transcript list approach
                 try:
-                    transcript_list = api.list(video_id)
-                    available_langs = [t.language_code for t in transcript_list]
-                    if available_langs:
-                        language = available_langs[0]
-                        transcript_data = api.fetch(video_id, languages=[language])
+                    transcript_list = ytt_api.list(video_id)
+                    # Use any available transcript
+                    available_transcripts = list(transcript_list)
+                    if available_transcripts:
+                        transcript = available_transcripts[0]
+                        fetched_transcript = transcript.fetch()
+                        transcript_data_raw = fetched_transcript.to_raw_data()
+                        language = transcript.language_code
                         print(f"Warning: Using available language: {language}")
                     else:
-                        raise Exception("No transcripts available for this video")
-                except Exception as inner_e:
-                    raise Exception(f"No transcripts available for this video: {str(inner_e)}")
+                        raise Exception(f"No transcripts available for this video: {str(inner_e)}")
+                except Exception as final_e:
+                    raise Exception(f"No transcripts available for this video: {str(final_e)}")
         
-        transcript_data_raw = transcript_data.to_raw_data()
+        if not transcript_data_raw:
+            raise Exception("Failed to fetch transcript data")
         title = get_video_title(video_id)
         downloaded_files = []
 
@@ -157,11 +177,14 @@ def main():
   python get_subs_youtube.py dQw4w9WgXcQ -sf srt
   python get_subs_youtube.py dQw4w9WgXcQ -sf srt vtt txt
   python get_subs_youtube.py https://youtube.com/watch?v=dQw4w9WgXcQ -sl id -sf vtt
+  python get_subs_youtube.py -f "Never Gonna Give You Up [dQw4w9WgXcQ].mp4"
+  python get_subs_youtube.py -f "Tutorial Video [abc123defgh].mp4" -sf srt
 
 Supported formats: srt, vtt, txt
 Common language codes: en, id, es, fr, de, ja, ko, zh
         """)
-    parser.add_argument('input', help='YouTube URL or 11-character video code')
+    parser.add_argument('input', nargs='?', help='YouTube URL or 11-character video code')
+    parser.add_argument('-f', '--filename', help='Extract video ID from filename format: "name [code].mp4"')
     parser.add_argument('-sl', '--sub-language', default='en', 
                        help='Subtitle language code (default: en)')
     parser.add_argument('-sf', '--subtitle-format', choices=['srt', 'vtt', 'txt'], 
@@ -169,9 +192,20 @@ Common language codes: en, id, es, fr, de, ja, ko, zh
     
     args = parser.parse_args()
     
-    video_id = extract_video_id(args.input)
-    if not video_id:
-        print("Error: Invalid YouTube URL or video ID")
+    # Determine video ID source
+    video_id = None
+    if args.filename:
+        video_id = extract_video_id_from_filename(args.filename)
+        if not video_id:
+            print("Error: Could not extract video ID from filename. Expected format: 'name [code].mp4'")
+            sys.exit(1)
+    elif args.input:
+        video_id = extract_video_id(args.input)
+        if not video_id:
+            print("Error: Invalid YouTube URL or video ID")
+            sys.exit(1)
+    else:
+        print("Error: Must provide either input URL/ID or filename (-f)")
         sys.exit(1)
     
     print(f"Downloading subtitles for video ID: {video_id}")

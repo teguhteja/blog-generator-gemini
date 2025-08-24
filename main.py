@@ -10,6 +10,96 @@ from dotenv import load_dotenv
 # Impor modul dari direktori lib
 from lib import workflow_steps, utils
 
+def clean_html_code_blocks(html_file_path):
+    """
+    Menghapus ```html ``` code blocks dari file HTML yang dihasilkan.
+    """
+    try:
+        with open(html_file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Hapus ```html di awal dan ``` di akhir
+        if content.strip().startswith('```html'):
+            print(f"🧹 Membersihkan HTML code blocks dari {html_file_path}")
+            
+            # Hapus ```html dari awal
+            content = re.sub(r'^```html\s*\n?', '', content, flags=re.MULTILINE)
+            
+            # Hapus ``` dari akhir
+            content = re.sub(r'\n?```\s*$', '', content, flags=re.MULTILINE)
+            
+            # Tulis kembali file yang sudah dibersihkan
+            with open(html_file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            print(f"✅ HTML code blocks berhasil dihapus dari {html_file_path}")
+            return True
+        else:
+            print(f"ℹ️  Tidak ada HTML code blocks yang perlu dibersihkan di {html_file_path}")
+            return True
+            
+    except Exception as e:
+        print(f"❌ Error membersihkan HTML code blocks dari {html_file_path}: {e}")
+        return False
+
+def generate_seo_json(seo_md_path, output_dir, model_config):
+    """
+    Membuat file seo.json berdasarkan file *.seo.md menggunakan prompt_seo_json.md
+    """
+    prompt_path = "prompt/prompt_seo_json.md"
+    output_json_path = os.path.join(output_dir, "seo.json")
+    
+    try:
+        # Baca prompt
+        with open(prompt_path, 'r', encoding='utf-8') as f:
+            prompt_content = f.read()
+        
+        # Baca file SEO
+        with open(seo_md_path, 'r', encoding='utf-8') as f:
+            seo_content = f.read()
+        
+        print(f"📝 Membuat seo.json dari {os.path.basename(seo_md_path)}")
+        
+        # Gabungkan prompt dengan konten SEO
+        full_prompt = f"{prompt_content}\n\n__INPUT_DATA__\n{seo_content}"
+        
+        # Inisialisasi model
+        model_name = model_config.get("model_seo_json", "gemini-1.5-flash")
+        model = genai.GenerativeModel(model_name)
+        
+        # Generate JSON
+        response = model.generate_content(full_prompt)
+        json_response = response.text.strip()
+        
+        # Clean JSON response (hapus code blocks jika ada)
+        if json_response.startswith('```json'):
+            json_response = re.sub(r'^```json\s*\n?', '', json_response, flags=re.MULTILINE)
+            json_response = re.sub(r'\n?```\s*$', '', json_response, flags=re.MULTILINE)
+        elif json_response.startswith('```'):
+            json_response = re.sub(r'^```\s*\n?', '', json_response, flags=re.MULTILINE)
+            json_response = re.sub(r'\n?```\s*$', '', json_response, flags=re.MULTILINE)
+        
+        # Validasi JSON
+        try:
+            json.loads(json_response)  # Test if valid JSON
+        except json.JSONDecodeError as e:
+            print(f"❌ Error: Generated content bukan JSON valid: {e}")
+            return False
+        
+        # Tulis file JSON
+        with open(output_json_path, 'w', encoding='utf-8') as f:
+            f.write(json_response)
+        
+        print(f"✅ File seo.json berhasil dibuat di {output_json_path}")
+        return True
+        
+    except FileNotFoundError as e:
+        print(f"❌ File tidak ditemukan: {e}")
+        return False
+    except Exception as e:
+        print(f"❌ Error membuat seo.json: {e}")
+        return False
+
 def run_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run, seo_keyphrase_choice=None):
     """
     Mengorkestrasi alur kerja pembuatan blog dengan memanggil fungsi dari modul.
@@ -88,12 +178,27 @@ def run_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run, 
 
     if 6 in steps_to_run:
         blog_md_file = os.path.join(dir_name, f"{dir_name}.blog.md")
-        if not workflow_steps.convert_md_to_html(
+        if workflow_steps.convert_md_to_html(
             blog_md_path=blog_md_file, output_dir=dir_name,
             prompt_path="prompt/prompt_convert_md_to_html.md",
             model_name=model_config.get("model_html", "gemini-1.5-flash"), # Ambil dari config model
             api_key=os.getenv("GANAI_API_KEY")):
+            
+            # Bersihkan HTML code blocks setelah konversi berhasil
+            html_file_path = os.path.join(dir_name, f"{dir_name}.html")
+            if os.path.exists(html_file_path):
+                clean_html_code_blocks(html_file_path)
+            else:
+                print(f"⚠️ File HTML tidak ditemukan di {html_file_path}")
+        else:
             print("⚠️ Peringatan: Gagal membuat html, melanjutkan proses...")
+
+    if 7 in steps_to_run:
+        if os.path.exists(output_seo_path):
+            if not generate_seo_json(output_seo_path, dir_name, model_config):
+                print("⚠️ Peringatan: Gagal membuat seo.json, melanjutkan proses...")
+        else:
+            print(f"⚠️ File SEO tidak ditemukan di {output_seo_path}, melewati pembuatan seo.json")
 
     print("\n🎉 Alur kerja selesai.")
 
@@ -131,7 +236,7 @@ def main():
     parser.add_argument("input", help="Path ke file input (.txt).", metavar="FILE_INPUT")
     parser.add_argument("-p", "--prompt", choices=prompt_choices, help=f"Pilih file prompt dari '{PROMPT_DIR}/'. (Default: auto-select berdasarkan konten)")
     parser.add_argument("-m", "--model-config", default=default_model_choice, choices=model_choices, help=f"Pilih file konfigurasi model dari '{MODEL_DIR}/'. (Default: %(default)s)")
-    parser.add_argument("--step", nargs='+', type=int, default=list(range(1, 7)), choices=range(1, 7), metavar='N', help="Langkah yang akan dijalankan: 1.Draft, 2.Keyphrases, 3.Blog, 4.Update SEO, 5.Image. 6.HTML (Default: semua)")
+    parser.add_argument("--step", nargs='+', type=int, default=list(range(1, 8)), choices=range(1, 8), metavar='N', help="Langkah yang akan dijalankan: 1.Draft, 2.Keyphrases, 3.Blog, 4.Update SEO, 5.Image, 6.HTML, 7.SEO JSON (Default: semua)")
     parser.add_argument("-sk", "--seo-keyphrase", type=int, choices=range(0, 6), metavar='N', help="Pilih keyphrase SEO: 1-5 untuk memilih langsung, 0 untuk pemilihan manual (Default: auto-select skor tertinggi)")
     args = parser.parse_args()
 
