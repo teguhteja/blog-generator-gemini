@@ -3,7 +3,10 @@ import sys
 from . import gemini_api, image_processing, utils
 import google.generativeai as genai
 
-PROMPT_DIR = "prompt"
+# Dapatkan direktori root project (direktori parent dari lib)
+_current_dir = os.path.dirname(os.path.abspath(__file__))
+_project_root = os.path.dirname(_current_dir)
+PROMPT_DIR = os.path.join(_project_root, "prompt")
 
 def generate_draft_tutorial(input_path, blog_prompt_path, base_name, output_md_path, model_config):
     """Langkah 1: Membuat draf tutorial dari file input."""

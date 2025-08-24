@@ -17,6 +17,10 @@ import argparse
 class WordPressUploader:
     def __init__(self, env_file='.env'):
         """Initialize dengan kredensial dari file .env"""
+        # Jika env_file adalah path relatif, gunakan direktori script
+        if not os.path.isabs(env_file):
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            env_file = os.path.join(script_dir, env_file)
         load_dotenv(env_file)
         
         self.wp_url = os.getenv('WP_URL')  # https://yoursite.com

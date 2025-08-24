@@ -46,7 +46,9 @@ def generate_seo_json(seo_md_path, output_dir, model_config):
     """
     Membuat file seo.json berdasarkan file *.seo.md menggunakan prompt_seo_json.md
     """
-    prompt_path = "prompt/prompt_seo_json.md"
+    # Dapatkan direktori script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    prompt_path = os.path.join(script_dir, "prompt", "prompt_seo_json.md")
     output_json_path = os.path.join(output_dir, "seo.json")
     
     try:
@@ -108,6 +110,9 @@ def run_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run, 
 
     # Langkah 0: Konfigurasi awal dan validasi path
     load_dotenv()
+    
+    # Dapatkan direktori script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
 
     try:
         with open(model_config_path, 'r') as f:
@@ -178,9 +183,10 @@ def run_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run, 
 
     if 6 in steps_to_run:
         blog_md_file = os.path.join(dir_name, f"{dir_name}.blog.md")
+        prompt_convert_path = os.path.join(script_dir, "prompt", "prompt_convert_md_to_html.md")
         if workflow_steps.convert_md_to_html(
             blog_md_path=blog_md_file, output_dir=dir_name,
-            prompt_path="prompt/prompt_convert_md_to_html.md",
+            prompt_path=prompt_convert_path,
             model_name=model_config.get("model_html", "gemini-1.5-flash"), # Ambil dari config model
             api_key=os.getenv("GANAI_API_KEY")):
             
@@ -204,8 +210,10 @@ def run_workflow(input_path, blog_prompt_path, model_config_path, steps_to_run, 
 
 def main():
     """Fungsi utama untuk parsing argumen dan menjalankan skrip."""
-    PROMPT_DIR = "prompt"
-    MODEL_DIR = "model"
+    # Dapatkan direktori script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    PROMPT_DIR = os.path.join(script_dir, "prompt")
+    MODEL_DIR = os.path.join(script_dir, "model")
     DEFAULT_PROMPT = "prompt_tutorial_odoo18.md"
 
     # Validasi direktori

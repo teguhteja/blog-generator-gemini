@@ -243,7 +243,10 @@ def run_generation_workflow(input_path, blog_prompt_path, model_config_path, ste
         youtube_link = f"https://www.youtube.com/watch?v={youtube_code}"
         print(f"🔗 Tautan YouTube terdeteksi: {youtube_link}")
 
-    PROMPT_DIR = "prompt"
+    # Dapatkan direktori root project (direktori parent dari lib)
+    _current_dir = os.path.dirname(os.path.abspath(__file__))
+    _project_root = os.path.dirname(_current_dir)
+    PROMPT_DIR = os.path.join(_project_root, "prompt")
     # Definisikan semua path prompt yang dibutuhkan
     keyphrase_prompt_path = os.path.join(PROMPT_DIR, "prompt_add_seo.md") # Prompt untuk mendapatkan keyphrase
     # Validasi file prompt (blog_prompt_path sudah divalidasi di main)
@@ -440,8 +443,11 @@ def run_generation_workflow(input_path, blog_prompt_path, model_config_path, ste
 
 def main():
     """Fungsi utama untuk parsing argumen dan menjalankan skrip."""
-    PROMPT_DIR = "prompt"
-    MODEL_DIR = "model"
+    # Dapatkan direktori root project (direktori parent dari lib)
+    _current_dir = os.path.dirname(os.path.abspath(__file__))
+    _project_root = os.path.dirname(_current_dir)
+    PROMPT_DIR = os.path.join(_project_root, "prompt")
+    MODEL_DIR = os.path.join(_project_root, "model")
     DEFAULT_PROMPT = "prompt_tutorial_odoo18.md"
 
     if not os.path.isdir(PROMPT_DIR):
