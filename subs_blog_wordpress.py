@@ -55,22 +55,68 @@ def find_subtitle_file(identifier):
     print(f"⚠️ File subtitle .txt tidak ditemukan untuk: {identifier}")
     return None
 
-def find_output_folder(identifier):
+def find_output_folder(identifier, original_filename=None):
     """
-    Cari folder output berdasarkan identifier
+    Cari folder output berdasarkan identifier atau nama file asli
     Returns: path folder atau None
     """
-    # Cari folder yang mengandung identifier
+    # Pattern 1: Cari berdasarkan identifier yang dinormalisasi
     possible_folders = glob.glob(f"*{identifier}*")
     folders = [f for f in possible_folders if os.path.isdir(f)]
     
     if folders:
         output_folder = folders[0]
-        print(f"✅ Folder output ditemukan: {output_folder}")
+        print(f"✅ Folder output ditemukan (identifier): {output_folder}")
         return output_folder
+    
+    # Pattern 2: Jika ada original filename, cari berdasarkan nama asli
+    if original_filename:
+        # Hapus ekstensi dari nama file asli
+        base_name = os.path.splitext(os.path.basename(original_filename))[0]
+        possible_folders = glob.glob(f"*{base_name}*")
+        folders = [f for f in possible_folders if os.path.isdir(f)]
+        
+        if folders:
+            output_folder = folders[0]
+            print(f"✅ Folder output ditemukan (nama asli): {output_folder}")
+            return output_folder
+    
+    # Pattern 3: Cari folder yang mengandung kata-kata dari identifier
+    if '-' in identifier:
+        words = identifier.split('-')
+        for word in words:
+            if len(word) > 2:  # Skip kata pendek
+                possible_folders = glob.glob(f"*{word}*")
+                folders = [f for f in possible_folders if os.path.isdir(f)]
+                if folders:
+                    output_folder = folders[0]
+                    print(f"✅ Folder output ditemukan (kata kunci '{word}'): {output_folder}")
+                    return output_folder
     
     print(f"⚠️ Folder output tidak ditemukan untuk: {identifier}")
     return None
+
+def check_folder_contents(folder_path):
+    """
+    Periksa apakah folder sudah berisi seo.json dan file .html
+    Returns: (has_seo_json, has_html, html_file_path)
+    """
+    if not os.path.exists(folder_path):
+        return False, False, None
+    
+    seo_json_path = os.path.join(folder_path, 'seo.json')
+    has_seo_json = os.path.exists(seo_json_path)
+    
+    # Cari file .html dalam folder
+    html_files = glob.glob(os.path.join(folder_path, '*.html'))
+    has_html = len(html_files) > 0
+    html_file_path = html_files[0] if html_files else None
+    
+    print(f"📋 Status folder {folder_path}:")
+    print(f"   {'✅' if has_seo_json else '❌'} seo.json: {'Ada' if has_seo_json else 'Tidak ada'}")
+    print(f"   {'✅' if has_html else '❌'} HTML file: {'Ada' if has_html else 'Tidak ada'} {f'({os.path.basename(html_file_path)})' if html_file_path else ''}")
+    
+    return has_seo_json, has_html, html_file_path
 
 def run_command(command, description):
     """Jalankan command dan tampilkan hasilnya"""
@@ -167,7 +213,9 @@ Catatan:
         print("\n📥 LANGKAH 1: Cari atau download subtitle")
         subtitle_file = find_subtitle_file(identifier)
         
-        if not subtitle_file:
+        if subtitle_file:
+            print("✅ File subtitle sudah ada, skip download")
+        else:
             print("📥 File subtitle tidak ditemukan, mencoba download...")
             if not run_command(['python', get_subs_script, '-f', nama_file], 
                               "Download YouTube subtitles"):
@@ -180,20 +228,40 @@ Catatan:
                 print(f"❌ File subtitle masih tidak ditemukan setelah download")
                 sys.exit(1)
     
-    # Langkah 2: Generate blog post
-    print("\n📝 LANGKAH 2: Generate blog post")
-    if not run_command(['python', main_script, subtitle_file], 
-                      "Generate blog post"):
-        print("❌ Gagal generate blog post, menghentikan proses")
-        sys.exit(1)
+    # Cek apakah folder output sudah ada
+    print("\n🔍 LANGKAH 2: Cek status folder output")
+    output_folder = find_output_folder(identifier, subtitle_file)
     
-    # Langkah 3: Cari folder output
-    print("\n🔍 LANGKAH 3: Cari folder output")
-    output_folder = find_output_folder(identifier)
+    if output_folder:
+        # Folder sudah ada, cek isinya
+        has_seo_json, has_html, html_file_path = check_folder_contents(output_folder)
+        
+        if has_seo_json and has_html:
+            print("✅ Folder sudah lengkap (seo.json + HTML), skip generate blog post")
+            need_generate = False
+        else:
+            print("⚠️ Folder tidak lengkap, perlu generate ulang")
+            need_generate = True
+    else:
+        print("⚠️ Folder belum ada, perlu generate blog post")
+        need_generate = True
     
-    if not output_folder:
-        print(f"❌ Folder output tidak ditemukan untuk identifier: {identifier}")
-        sys.exit(1)
+    # Langkah 3: Generate blog post (jika diperlukan)
+    if need_generate:
+        print("\n📝 LANGKAH 3: Generate blog post")
+        if not run_command(['python', main_script, subtitle_file], 
+                          "Generate blog post"):
+            print("❌ Gagal generate blog post, menghentikan proses")
+            sys.exit(1)
+        
+        # Cari folder output setelah generate dengan multiple strategies
+        output_folder = find_output_folder(identifier, subtitle_file)
+        if not output_folder:
+            print(f"❌ Folder output tidak ditemukan setelah generate untuk identifier: {identifier}")
+            print(f"💡 Mencoba dengan nama file asli: {subtitle_file}")
+            sys.exit(1)
+    else:
+        print("\n⏭️ LANGKAH 3: Skip generate blog post (sudah ada)")
     
     # Langkah 4: Upload ke WordPress
     print("\n📤 LANGKAH 4: Upload ke WordPress")
