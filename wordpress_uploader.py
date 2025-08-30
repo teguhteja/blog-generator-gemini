@@ -283,15 +283,16 @@ class WordPressUploader:
         for html_file in html_files:
             print(f"\n--- Memproses {html_file.name} ---")
             
-            # Cari gambar dengan nama yang sama (tanpa ekstensi)
-            html_name = html_file.stem
             featured_image_id = None
             
-            if html_name in uploaded_images:
-                featured_image_id = uploaded_images[html_name]['id']
-                print(f"🖼️ Menggunakan featured image: {html_name} (ID: {featured_image_id})")
+            if uploaded_images:
+                # Gunakan gambar pertama yang diupload sebagai featured image (biasanya berisi keyphrases)
+                first_image = next(iter(uploaded_images.values()))
+                featured_image_id = first_image['id']
+                first_image_name = list(uploaded_images.keys())[0]
+                print(f"🖼️ Menggunakan featured image: {first_image_name} (ID: {featured_image_id})")
             else:
-                print("⚠️ Tidak ada gambar yang cocok ditemukan untuk featured image")
+                print("⚠️ Tidak ada gambar yang diupload untuk featured image")
             
             # Buat post dengan SEO data
             self.create_post(str(html_file), featured_image_id, post_status, seo_data)

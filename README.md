@@ -20,6 +20,7 @@ This project automates the creation of blog articles, complete with SEO analysis
 - **Image Optimization**: Automatically resizes and optimizes generated images for the web (requires ImageMagick).
 - **Cost Tracking**: Logs the estimated cost of each API call to `usage_log.csv`.
 - **WordPress Integration Ready**: Generated files work seamlessly with the included WordPress uploader.
+- **Full Automation Script**: New `subs-blog-wordpress.py` handles the entire workflow in one command.
 
 ## Project Structure
 
@@ -32,8 +33,10 @@ This project automates the creation of blog articles, complete with SEO analysis
 ├── chat/                    # Chat logs and session history
 ├── get_subs_youtube.py      # Script to download YouTube subtitles
 ├── main.py                  # Main script to run the blog generation workflow
+├── subs-blog-wordpress.py   # All-in-one automation script (NEW!)
 ├── wordpress-uploader.py    # WordPress upload script with Rank Math integration
 ├── README.md                # This file
+├── subs-blog-wordpress.README.md  # Automation script documentation
 ├── README.wordpress-uploader.md  # WordPress uploader documentation
 └── usage_log.csv            # API usage cost tracking
 ```
@@ -81,9 +84,31 @@ This project automates the creation of blog articles, complete with SEO analysis
 
 ## How to Run
 
-The workflow is a two-step process:
+### Option 1: Full Automation (Recommended)
 
-### Step 1: Download Subtitles
+Use the all-in-one automation script that handles the entire workflow:
+
+```bash
+# Full automation: Download subtitles → Generate blog → Upload to WordPress
+python subs-blog-wordpress.py "Video Title [video_id]" --status publish
+
+# Or with draft status (default)
+python subs-blog-wordpress.py "Tutorial Video Name"
+```
+
+This script will:
+1. **Extract identifier** from your input (YouTube code from `[code]` or first 3 words)
+2. **Find existing subtitles** or download them if needed
+3. **Generate blog post** with all SEO optimization
+4. **Upload to WordPress** with featured image and Rank Math SEO
+
+See [`subs-blog-wordpress.README.md`](subs-blog-wordpress.README.md) for detailed automation documentation.
+
+### Option 2: Manual Step-by-Step Process
+
+For more control over individual steps:
+
+#### Step 1: Download Subtitles
 
 First, download the subtitles from a YouTube video. This will create a `.txt` file in the project directory.
 
@@ -92,7 +117,7 @@ python get_subs_youtube.py [YOUTUBE_VIDEO_URL]
 ```
 This will generate a file like `Video Title [video_id].txt`.
 
-### Step 2: Generate Blog Post
+#### Step 2: Generate Blog Post
 
 Next, use the generated text file as input for the main script.
 

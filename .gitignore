@@ -6,20 +6,18 @@
 *.mkv
 *.vtt
 *.mp4
+*.txt
+*.srt
+*.zip
 usage_log.csv
 video/
 owl-odoo-video/
 .vscode/
 diff/
-*.mp4
-*.srt
-*.zip
 ai-engineer/
-Checkmate Patterns for Beginners – Full Chess Tutorial [1AX7_aPWmbE]/
 experimental-pdf/
 Kode.id - IT developer batch 1/
 mcp/
 Odoo Portal Development/
-owl-odoo-video/
-to-do-blog/
-*.mp4
+to-do-blog/*
+to-do-blog
